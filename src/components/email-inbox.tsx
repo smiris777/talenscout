@@ -13,6 +13,7 @@ interface SentEmail {
   sequence_step: number;
   sent_at: string | null;
   error_message?: string | null;
+  source?: string | null;
 }
 
 interface ReceivedEmail {
@@ -152,7 +153,8 @@ export function EmailInbox({
                         <td className="py-2 text-gray-600 max-w-48 truncate">{email.subject}</td>
                         <td className="py-2">
                           <Badge variant="outline" className="text-xs">
-                            {email.sequence_step === 1 ? "Initial" : `Follow-up ${email.sequence_step - 1}`}
+                            {email.source === "scan" ? "📸 Scan" : email.source === "manual" ? "✍️ Manuell" : "🤖 Auto"}
+                            {email.sequence_step > 1 ? ` · F${email.sequence_step - 1}` : ""}
                           </Badge>
                         </td>
                         <td className="py-2">
