@@ -157,7 +157,7 @@ export async function applyToJobListing(listingId: string) {
       source: "scan",
     });
 
-    // Also insert into bewerbungen for tracking
+    // Also insert into bewerbungen for tracking (ignore duplicate)
     await admin.from("bewerbungen").insert({
       email: listing.contact_email,
       firmenname: listing.company_name,
@@ -165,7 +165,7 @@ export async function applyToJobListing(listingId: string) {
       bereich: listing.job_title,
       student_user_id: user.id,
       status: "gesendet",
-    }).catch(() => {}); // ignore duplicate
+    });
 
     // Mark as applied
     await supabase.from("job_listings").update({ applied: true }).eq("id", listingId);
