@@ -122,7 +122,7 @@ export async function applyToJobListing(listingId: string) {
     einleitung: personalized.einleitung,
     motivationAngepasst: personalized.motivationAngepasst,
     studentName: student.Namen || "Bewerber",
-    studentEmail: creds.gmail_address,
+    studentEmail: creds.email,
     studentZiel: student.Ziel || listing.job_title || "Ausbildung",
     deutschNiveau: student["Deutsch Niveau"] || "B1",
     art: student.Art || undefined,
@@ -137,7 +137,7 @@ export async function applyToJobListing(listingId: string) {
   // Send email NOW
   try {
     await sendEmail({
-      fromEmail: creds.gmail_address,
+      fromEmail: creds.email,
       fromName: student.Namen || "Bewerber",
       appPassword,
       to: listing.contact_email,
