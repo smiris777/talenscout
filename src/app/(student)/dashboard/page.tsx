@@ -4,6 +4,7 @@ import { normalizeAzubi, getGDriveThumbnailUrl, getStatusColor, getNiveauColor }
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
+import { GamificationWidget } from "@/components/gamification-widget";
 
 const AZUBI_SELECT = `*, monthly_credit, daily_email_enabled, gmail_app_password_set, student_active`;
 
@@ -62,6 +63,20 @@ export default async function StudentDashboard() {
     .order("due_date", { ascending: true })
     .limit(3);
 
+  // Gamification data
+  const { data: streakData } = await supabase
+    .from("student_streaks")
+    .select("*")
+    .eq("student_id", user.id)
+    .single();
+
+  const { data: recentPoints } = await supabase
+    .from("student_points")
+    .select("*")
+    .eq("student_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
   const credit = rawStudent.monthly_credit || 0;
   const used = monthlyUsage || 0;
   const remaining = Math.max(0, credit - used);
@@ -104,6 +119,9 @@ export default async function StudentDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Gamification Widget */}
+      <GamificationWidget streak={streakData} recentPoints={recentPoints || []} />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Credit Widget */}

@@ -59,6 +59,29 @@ export function AdminDashboard({ azubis }: { azubis: AdminAzubi[] }) {
   const [saving, setSaving] = useState<number | null>(null);
   const [creditDialog, setCreditDialog] = useState<{ azubi: AdminAzubi; mode: "einmalig" | "monatlich" | "sperren" } | null>(null);
   const [creditAmount, setCreditAmount] = useState("");
+  const [smtpStatus, setSmtpStatus] = useState<Record<string, { status: "loading" | "connected" | "failed" | "no_credentials"; gmail?: string; error?: string }>>({});
+
+  async function testSmtp(userId: string) {
+    setSmtpStatus((prev) => ({ ...prev, [userId]: { status: "loading" } }));
+    try {
+      const res = await fetch("/api/admin/test-smtp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      const data = await res.json();
+      setSmtpStatus((prev) => ({ ...prev, [userId]: { status: data.status || (data.success ? "connected" : "failed"), gmail: data.gmail, error: data.error } }));
+    } catch {
+      setSmtpStatus((prev) => ({ ...prev, [userId]: { status: "failed", error: "Netzwerkfehler" } }));
+    }
+  }
+
+  async function testAllSmtp() {
+    const withGmail = azubis.filter((a) => a.gmail_app_password_set && a.user_id);
+    for (const a of withGmail) {
+      testSmtp(a.user_id!);
+    }
+  }
 
   const filtered = useMemo(() => {
     if (!search) return azubis;
@@ -142,7 +165,15 @@ export function AdminDashboard({ azubis }: { azubis: AdminAzubi[] }) {
         className="max-w-md"
       />
 
-      <p className="text-sm text-gray-500">{filtered.length} Kandidaten</p>
+      <div className="flex items-center gap-4">
+        <p className="text-sm text-gray-500">{filtered.length} Kandidaten</p>
+        <button
+          onClick={testAllSmtp}
+          className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+        >
+          Alle SMTP testen
+        </button>
+      </div>
 
       {/* Credit Dialog */}
       {creditDialog && (
@@ -243,6 +274,7 @@ export function AdminDashboard({ azubis }: { azubis: AdminAzubi[] }) {
               <th className="p-3 font-medium text-center">Aktiv</th>
               <th className="p-3 font-medium text-center">Auto-Email</th>
               <th className="p-3 font-medium text-center">Gmail</th>
+              <th className="p-3 font-medium text-center">SMTP</th>
               <th className="p-3 font-medium text-center">Sichtbar</th>
               <th className="p-3 font-medium text-center">Drive</th>
             </tr>
@@ -347,6 +379,45 @@ export function AdminDashboard({ azubis }: { azubis: AdminAzubi[] }) {
                     <span className={`text-lg ${hasGmail ? "" : "opacity-30"}`} title={hasGmail ? "Gmail verbunden" : "Gmail nicht eingerichtet"}>
                       {hasGmail ? "✅" : "❌"}
                     </span>
+                  </td>
+                  {/* SMTP Status */}
+                  <td className="p-3 text-center">
+                    {azubi.user_id && hasGmail ? (
+                      (() => {
+                        const st = smtpStatus[azubi.user_id!];
+                        if (!st) {
+                          return (
+                            <button
+                              onClick={() => testSmtp(azubi.user_id!)}
+                              className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                              title="SMTP-Verbindung testen"
+                            >
+                              Testen
+                            </button>
+                          );
+                        }
+                        if (st.status === "loading") {
+                          return <span className="text-xs text-gray-400 animate-pulse">Teste...</span>;
+                        }
+                        if (st.status === "connected") {
+                          return (
+                            <span className="text-xs text-green-600 font-medium" title={st.gmail || ""}>
+                              Verbunden
+                            </span>
+                          );
+                        }
+                        if (st.status === "no_credentials") {
+                          return <span className="text-xs text-orange-500" title="Keine Zugangsdaten">Keine Daten</span>;
+                        }
+                        return (
+                          <span className="text-xs text-red-600 cursor-help" title={st.error || "Fehler"}>
+                            Fehler
+                          </span>
+                        );
+                      })()
+                    ) : (
+                      <span className="text-gray-300 text-xs">-</span>
+                    )}
                   </td>
                   {/* Sichtbar */}
                   <td className="p-3 text-center">

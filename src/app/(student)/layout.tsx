@@ -63,6 +63,20 @@ export default async function StudentLayout({
     .eq("user_id", user.id)
     .eq("status", "pending");
 
+  // Count active scan listings
+  const { count: scanCount } = await supabase
+    .from("job_listings")
+    .select("*", { count: "exact", head: true })
+    .eq("student_id", user.id)
+    .eq("transferred", false);
+
+  // Get streak
+  const { data: streak } = await supabase
+    .from("student_streaks")
+    .select("current_streak")
+    .eq("student_id", user.id)
+    .single();
+
   return (
     <div className="min-h-screen bg-gray-50">
       <StudentNavBar
@@ -70,6 +84,8 @@ export default async function StudentLayout({
         creditUsed={monthlyUsage || 0}
         creditTotal={student?.monthly_credit || 0}
         pendingTasks={pendingTasks || 0}
+        scanCount={scanCount || 0}
+        streakDays={streak?.current_streak || 0}
       />
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
         {children}

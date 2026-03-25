@@ -49,6 +49,67 @@ export interface Azubi {
   sichtbar: boolean;
 }
 
+// Job Listings (Scan & Apply - private 30-day DB)
+export interface JobListing {
+  id: string;
+  student_id: string;
+  company_name: string;
+  job_title: string | null;
+  location: string | null;
+  contact_email: string | null;
+  phone: string | null;
+  deadline: string | null;
+  scan_image_url: string | null;
+  rating: number;
+  notes: string | null;
+  expires_at: string;
+  transferred: boolean;
+  created_at: string;
+}
+
+export interface JobListingInput {
+  company_name: string;
+  job_title?: string;
+  location?: string;
+  contact_email?: string;
+  phone?: string;
+  deadline?: string;
+  scan_image_url?: string;
+}
+
+// Reward Rules (admin-configurable)
+export interface RewardRule {
+  id: string;
+  rule_type: string;
+  rule_key: string;
+  rule_value: Record<string, number>;
+  is_active: boolean;
+  updated_at: string;
+}
+
+// Student Points
+export interface StudentPoint {
+  id: string;
+  student_id: string;
+  points: number;
+  source: string;
+  description: string | null;
+  created_at: string;
+}
+
+// Student Streaks (Gamification)
+export interface StudentStreak {
+  student_id: string;
+  current_streak: number;
+  longest_streak: number;
+  last_activity_date: string | null;
+  total_points: number;
+  level: number;
+  xp: number;
+  xp_to_next_level: number;
+  updated_at: string;
+}
+
 export type AktivStatus =
   | "ja"
   | "nein"

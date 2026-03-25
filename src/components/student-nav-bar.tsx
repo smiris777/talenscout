@@ -9,6 +9,8 @@ interface StudentNavBarProps {
   creditUsed: number;
   creditTotal: number;
   pendingTasks: number;
+  scanCount?: number;
+  streakDays?: number;
 }
 
 export function StudentNavBar({
@@ -16,12 +18,15 @@ export function StudentNavBar({
   creditUsed,
   creditTotal,
   pendingTasks,
+  scanCount = 0,
+  streakDays = 0,
 }: StudentNavBarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
   const navItems = [
     { href: "/dashboard", label: "Dashboard" },
+    { href: "/scan", label: "Scan & Apply", badge: scanCount },
     { href: "/bewerbungen", label: "Bewerbungen" },
     { href: "/aufgaben", label: "Aufgaben", badge: pendingTasks },
     { href: "/email-setup", label: "E-Mail Setup" },
@@ -71,6 +76,12 @@ export function StudentNavBar({
           </div>
 
           <div className="flex items-center gap-4">
+            {streakDays > 0 && (
+              <div className="hidden sm:flex items-center gap-1 text-sm">
+                <span>🔥</span>
+                <span className="font-semibold text-orange-600">{streakDays}</span>
+              </div>
+            )}
             {creditTotal > 0 && (
               <div className="hidden sm:flex items-center gap-2 text-sm">
                 <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">

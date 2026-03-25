@@ -86,7 +86,19 @@
       "Bash(printf \"8572cf0fa36cc565a28b3b12bd971b77ae43c3cc7b716488160c3fddc8da39cc\")",
       "Bash(ls \"C:/Users/youss/TalentScout/src/app/\\(student\\)/\")",
       "Bash(where npx:*)",
-      "Bash(taskkill //F //IM node.exe)"
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(npx vercel:*)",
+      "Bash(find C:UsersyoussTalentScout -name *.sql -type f)",
+      "Bash(find C:UsersyoussTalentScout -path *supabase*migrations* -type f)",
+      "Bash(xargs grep:*)",
+      "Bash(EMAIL_ENCRYPTION_KEY=8572cf0fa36cc565a28b3b12bd971b77ae43c3cc7b716488160c3fddc8da39cc node -e \":*)",
+      "Bash(pip install:*)",
+      "Bash(where python:*)",
+      "Bash(where python3:*)",
+      "Bash(where pip:*)",
+      "Bash(where pip3:*)",
+      "Bash(ls \"C:/Python\"*)",
+      "Bash(\"C:/Users/youss/AppData/Local/Microsoft/WindowsApps/python.exe\" -m pip install pdfplumber)"
     ]
   }
 }
