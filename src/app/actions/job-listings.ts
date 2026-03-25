@@ -56,7 +56,8 @@ export async function deleteJobListing(listingId: string) {
   revalidatePath("/scan/listings");
 }
 
-export async function transferJobListingNow(listingId: string) {
+// Student bewirbt sich direkt bei einer gescannten Firma
+export async function applyToJobListing(listingId: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Nicht eingeloggt");
@@ -69,9 +70,56 @@ export async function transferJobListingNow(listingId: string) {
     .single();
 
   if (fetchErr || !listing) throw new Error("Eintrag nicht gefunden");
+  if (listing.applied) throw new Error("Bereits beworben");
+  if (!listing.contact_email) throw new Error("Keine E-Mail-Adresse vorhanden");
+
+  const admin = createAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  // Insert into bewerbungen (creates the application entry for the email system)
+  const { error: insertErr } = await admin.from("bewerbungen").insert({
+    email: listing.contact_email,
+    firmenname: listing.company_name,
+    telefonnummer: listing.phone,
+    bereich: listing.job_title,
+    student_user_id: user.id,
+  });
+
+  if (insertErr) {
+    // If duplicate, still mark as applied
+    if (insertErr.code === "23505") {
+      await supabase.from("job_listings").update({ applied: true }).eq("id", listingId);
+      revalidatePath("/scan");
+      return { status: "success", message: "Bewerbung wurde bereits gesendet" };
+    }
+    throw new Error(insertErr.message);
+  }
+
+  // Mark as applied
+  await supabase.from("job_listings").update({ applied: true }).eq("id", listingId);
+
+  revalidatePath("/scan");
+  revalidatePath("/bewerbungen");
+  return { status: "success", message: "Bewerbung erfolgreich erstellt! Die Email wird automatisch versendet." };
+}
+
+// Automatischer Transfer nach 30 Tagen (wird vom Cron-Job aufgerufen, nicht vom Student)
+export async function transferJobListingNow(listingId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Nicht eingeloggt");
+
+  const { data: listing, error: fetchErr } = await supabase
+    .from("job_listings")
+    .select("*")
+    .eq("id", listingId)
+    .single();
+
+  if (fetchErr || !listing) throw new Error("Eintrag nicht gefunden");
   if (listing.transferred) throw new Error("Bereits übertragen");
 
-  // Use admin client for bewerbungen insert
   const admin = createAdmin(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -85,13 +133,11 @@ export async function transferJobListingNow(listingId: string) {
     .limit(1);
 
   if (existing && existing.length > 0) {
-    // Mark as transferred even if duplicate
     await supabase.from("job_listings").update({ transferred: true }).eq("id", listingId);
-    revalidatePath("/scan/listings");
+    revalidatePath("/scan");
     return { status: "duplicate", message: "Firma existiert bereits in der Datenbank" };
   }
 
-  // Insert into bewerbungen
   const { error: insertErr } = await admin.from("bewerbungen").insert({
     email: listing.contact_email,
     firmenname: listing.company_name,
@@ -102,10 +148,9 @@ export async function transferJobListingNow(listingId: string) {
 
   if (insertErr) throw new Error(insertErr.message);
 
-  // Mark as transferred
   await supabase.from("job_listings").update({ transferred: true }).eq("id", listingId);
 
-  revalidatePath("/scan/listings");
+  revalidatePath("/scan");
   revalidatePath("/bewerbungen");
   return { status: "success", message: "Firma erfolgreich übertragen" };
 }

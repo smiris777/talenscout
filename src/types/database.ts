@@ -64,6 +64,7 @@ export interface JobListing {
   notes: string | null;
   expires_at: string;
   transferred: boolean;
+  applied: boolean;
   created_at: string;
 }
 

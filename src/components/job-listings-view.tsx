@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { updateJobRating, updateJobNotes, deleteJobListing, transferJobListingNow } from "@/app/actions/job-listings";
+import { updateJobRating, updateJobNotes, deleteJobListing, applyToJobListing } from "@/app/actions/job-listings";
 import type { JobListing } from "@/types/database";
 
 interface Props {
@@ -34,6 +34,7 @@ function StarRating({ rating, onChange }: { rating: number; onChange: (r: number
 function ListingCard({ listing }: { listing: JobListing }) {
   const [notes, setNotes] = useState(listing.notes || "");
   const [loading, setLoading] = useState<string | null>(null);
+  const [applied, setApplied] = useState(listing.applied || false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const days = daysLeft(listing.expires_at);
 
@@ -48,26 +49,35 @@ function ListingCard({ listing }: { listing: JobListing }) {
   }
 
   async function handleDelete() {
-    if (!confirm(`"${listing.company_name}" wirklich löschen? Diese Firma wird NICHT in die allgemeine DB übertragen.`)) return;
+    if (!confirm(`"${listing.company_name}" wirklich löschen?`)) return;
     setLoading("delete");
     try { await deleteJobListing(listing.id); } catch { setLoading(null); }
   }
 
-  async function handleTransfer() {
-    if (!confirm(`"${listing.company_name}" jetzt in die allgemeine Firmen-DB übertragen?`)) return;
-    setLoading("transfer");
+  async function handleApply() {
+    if (!listing.contact_email) {
+      setMessage({ type: "error", text: "Keine E-Mail-Adresse vorhanden. Bitte ergänzen." });
+      return;
+    }
+    setLoading("apply");
+    setMessage(null);
     try {
-      const result = await transferJobListingNow(listing.id);
-      setMessage({ type: result.status === "duplicate" ? "error" : "success", text: result.message });
+      const result = await applyToJobListing(listing.id);
+      if (result.status === "success") {
+        setApplied(true);
+        setMessage({ type: "success", text: "✅ Bewerbung gesendet!" });
+      } else {
+        setMessage({ type: "error", text: result.message });
+      }
     } catch (err) {
-      setMessage({ type: "error", text: err instanceof Error ? err.message : "Fehler" });
+      setMessage({ type: "error", text: err instanceof Error ? err.message : "Bewerbung fehlgeschlagen" });
     } finally {
       setLoading(null);
     }
   }
 
   return (
-    <Card className="overflow-hidden">
+    <Card className={`overflow-hidden ${applied ? "border-green-300 bg-green-50/30" : ""}`}>
       <CardContent className="p-4 space-y-3">
         {/* Header */}
         <div className="flex items-start justify-between">
@@ -75,9 +85,16 @@ function ListingCard({ listing }: { listing: JobListing }) {
             <h3 className="font-semibold text-gray-900">{listing.company_name}</h3>
             {listing.job_title && <p className="text-sm text-gray-500">{listing.job_title}</p>}
           </div>
-          <Badge variant={days <= 5 ? "destructive" : days <= 14 ? "secondary" : "outline"} className="whitespace-nowrap">
-            {days === 0 ? "Heute" : `noch ${days} Tage`}
-          </Badge>
+          <div className="flex flex-col items-end gap-1">
+            {applied && (
+              <Badge className="bg-green-500 text-white whitespace-nowrap">
+                ✅ Beworben
+              </Badge>
+            )}
+            <Badge variant="outline" className="whitespace-nowrap text-xs text-gray-400">
+              Gescannt {new Date(listing.created_at).toLocaleDateString("de-DE")}
+            </Badge>
+          </div>
         </div>
 
         {/* Details */}
@@ -121,21 +138,31 @@ function ListingCard({ listing }: { listing: JobListing }) {
 
         {/* Message */}
         {message && (
-          <div className={`p-2 rounded text-xs ${message.type === "success" ? "bg-green-50 text-green-700" : "bg-yellow-50 text-yellow-700"}`}>
+          <div className={`p-2 rounded text-xs ${message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
             {message.text}
           </div>
         )}
 
         {/* Actions */}
         <div className="flex gap-2 pt-1">
-          <Button
-            size="sm"
-            onClick={handleTransfer}
-            disabled={loading !== null}
-            className="bg-blue-600 hover:bg-blue-700 text-xs"
-          >
-            {loading === "transfer" ? "..." : "🚀 Jetzt übertragen"}
-          </Button>
+          {!applied ? (
+            <Button
+              size="sm"
+              onClick={handleApply}
+              disabled={loading !== null}
+              className="bg-green-600 hover:bg-green-700 text-xs flex-1"
+            >
+              {loading === "apply" ? (
+                <span className="flex items-center gap-1"><span className="animate-spin">⏳</span> Bewerbung wird gesendet...</span>
+              ) : (
+                "📨 Jetzt bewerben"
+              )}
+            </Button>
+          ) : (
+            <Button size="sm" disabled className="bg-gray-200 text-gray-500 text-xs flex-1">
+              ✅ Bewerbung gesendet
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"
@@ -143,7 +170,7 @@ function ListingCard({ listing }: { listing: JobListing }) {
             disabled={loading !== null}
             className="text-red-600 border-red-200 hover:bg-red-50 text-xs"
           >
-            {loading === "delete" ? "..." : "🗑️ Löschen"}
+            {loading === "delete" ? "..." : "🗑️"}
           </Button>
         </div>
       </CardContent>
