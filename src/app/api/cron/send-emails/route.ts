@@ -119,15 +119,20 @@ export async function GET(request: Request) {
         .select("email, firmenname, telefonnummer, geschlecht, name, bereich")
         .not("email", "is", null);
 
-      // Smart matching: use bereich mapping for fuzzy matching
+      // Smart matching: extract core job title and filter by bereich
       if (studentZiel) {
-        const bereiche = getMatchingBereiche(studentZiel)
-          // Remove values with special chars that break PostgREST OR syntax
-          .filter((b) => /^[a-zA-ZäöüÄÖÜß0-9\s\-]+$/.test(b));
+        const bereiche = getMatchingBereiche(studentZiel);
         if (bereiche.length > 0) {
           const orFilter = bereiche.map((b) => `bereich.ilike.%${b}%`).join(",");
           companiesQuery = companiesQuery.or(orFilter);
+        } else {
+          // No terms found → skip this student, don't send to random companies
+          console.warn(`No bereich terms for student Ziel: "${studentZiel}"`);
+          continue;
         }
+      } else {
+        // No Ziel set → skip
+        continue;
       }
 
       const { data: companies, error: companiesError } = await companiesQuery.limit(500);

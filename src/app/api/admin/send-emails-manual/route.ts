@@ -81,16 +81,26 @@ export async function POST(request: Request) {
     .select("email, firmenname, telefonnummer, geschlecht, name, bereich")
     .not("email", "is", null);
 
-  if (studentZiel) {
-    const bereiche = getMatchingBereiche(studentZiel)
-      .filter((b) => /^[a-zA-ZäöüÄÖÜß0-9\s\-]+$/.test(b));
-    if (bereiche.length > 0) {
-      const orFilter = bereiche.map((b) => `bereich.ilike.%${b}%`).join(",");
-      companiesQuery = companiesQuery.or(orFilter);
-    }
+  if (!studentZiel) {
+    return NextResponse.json({ error: "Student hat kein Ziel eingetragen — bitte erst Ziel setzen." }, { status: 400 });
   }
 
-  const { data: companies } = await companiesQuery.limit(500);
+  const bereiche = getMatchingBereiche(studentZiel);
+  if (bereiche.length === 0) {
+    return NextResponse.json({ error: `Kein Bereich erkannt für Ziel: "${studentZiel}" — bitte Ziel anpassen.` }, { status: 400 });
+  }
+
+  const orFilter = bereiche.map((b) => `bereich.ilike.%${b}%`).join(",");
+  companiesQuery = companiesQuery.or(orFilter);
+
+  // Debug log (visible in Vercel logs)
+  console.log(`[manual-send] ${student.Namen} | Ziel: "${studentZiel}" | Bereiche: [${bereiche.join(", ")}]`);
+
+  const { data: companies, error: companiesQueryError } = await companiesQuery.limit(500);
+  if (companiesQueryError) {
+    console.error("[manual-send] companies query error:", companiesQueryError.message);
+    return NextResponse.json({ error: "Datenbankfehler: " + companiesQueryError.message }, { status: 500 });
+  }
 
   const uniqueCompanies = new Map<string, any>();
   for (const c of companies || []) {
