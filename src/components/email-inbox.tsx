@@ -14,6 +14,7 @@ interface SentEmail {
   sent_at: string | null;
   error_message?: string | null;
   source?: string | null;
+  body_html?: string | null;
 }
 
 interface ReceivedEmail {
@@ -39,6 +40,7 @@ export function EmailInbox({
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
   const [selectedReceived, setSelectedReceived] = useState<ReceivedEmail | null>(null);
+  const [selectedSent, setSelectedSent] = useState<SentEmail | null>(null);
 
   async function handleSync() {
     setSyncing(true);
@@ -85,21 +87,21 @@ export function EmailInbox({
 
   return (
     <>
-      <Card>
-        <CardHeader>
+      <Card className="rounded-2xl border-0 bg-white/80 backdrop-blur-sm shadow-sm shadow-black/[0.03] overflow-hidden">
+        <CardHeader className="pb-0">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">E-Mail Verlauf</CardTitle>
+            <CardTitle className="text-lg font-semibold text-[#1d1d1f] tracking-tight">E-Mail Verlauf</CardTitle>
             <div className="flex items-center gap-2">
               {syncMessage && (
-                <span className="text-xs text-gray-500">{syncMessage}</span>
+                <span className="text-xs text-gray-400">{syncMessage}</span>
               )}
               <button
                 onClick={handleSync}
                 disabled={syncing}
-                className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1"
+                className="px-3.5 py-1.5 text-xs font-medium text-[#1d1d1f] bg-gray-100/80 hover:bg-gray-200/80 rounded-full transition-all duration-200 disabled:opacity-50 flex items-center gap-1.5"
               >
                 {syncing ? (
-                  <span className="inline-block w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  <span className="inline-block w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
                 ) : (
                   "📥"
                 )}
@@ -109,7 +111,7 @@ export function EmailInbox({
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 mt-3 border-b">
+          <div className="flex gap-0.5 mt-4 bg-gray-100/80 rounded-full p-1 w-fit">
             {([
               { key: "gesendet", label: "Gesendet", count: sentEmails.length },
               { key: "empfangen", label: "Empfangen", count: receivedEmails.length },
@@ -118,10 +120,10 @@ export function EmailInbox({
               <button
                 key={key}
                 onClick={() => setTab(key)}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ${
                   tab === key
-                    ? "border-blue-600 text-blue-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
+                    ? "bg-white text-[#1d1d1f] shadow-sm"
+                    : "text-gray-400 hover:text-gray-600"
                 }`}
               >
                 {label} ({count})
@@ -136,21 +138,25 @@ export function EmailInbox({
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left text-gray-500 border-b">
-                      <th className="pb-2 font-medium">Firma</th>
-                      <th className="pb-2 font-medium">Empfänger</th>
-                      <th className="pb-2 font-medium">Betreff</th>
-                      <th className="pb-2 font-medium">Schritt</th>
-                      <th className="pb-2 font-medium">Status</th>
-                      <th className="pb-2 font-medium">Datum</th>
+                    <tr className="text-left text-gray-400 border-b border-gray-100">
+                      <th className="pb-3 text-xs font-medium uppercase tracking-wider">Firma</th>
+                      <th className="pb-3 text-xs font-medium uppercase tracking-wider">Empfänger</th>
+                      <th className="pb-3 text-xs font-medium uppercase tracking-wider">Betreff</th>
+                      <th className="pb-3 text-xs font-medium uppercase tracking-wider">Schritt</th>
+                      <th className="pb-3 text-xs font-medium uppercase tracking-wider">Status</th>
+                      <th className="pb-3 text-xs font-medium uppercase tracking-wider">Datum</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {sentEmails.map((email) => (
-                      <tr key={email.id}>
-                        <td className="py-2 font-medium text-gray-900">{email.company_name || "-"}</td>
-                        <td className="py-2 text-gray-600 max-w-36 truncate">{email.recipient_email}</td>
-                        <td className="py-2 text-gray-600 max-w-48 truncate">{email.subject}</td>
+                      <tr
+                        key={email.id}
+                        onClick={() => setSelectedSent(email)}
+                        className="cursor-pointer hover:bg-gray-50/80 transition-all duration-200"
+                      >
+                        <td className="py-3 font-medium text-[#1d1d1f]">{email.company_name || "-"}</td>
+                        <td className="py-3 text-gray-400 max-w-36 truncate">{email.recipient_email}</td>
+                        <td className="py-3 text-gray-500 max-w-48 truncate">{email.subject}</td>
                         <td className="py-2">
                           <Badge variant="outline" className="text-xs">
                             {email.source === "scan" ? "📸 Scan" : email.source === "manual" ? "✍️ Manuell" : "🤖 Auto"}
@@ -186,8 +192,8 @@ export function EmailInbox({
                   <button
                     key={email.id}
                     onClick={() => setSelectedReceived(email)}
-                    className={`w-full text-left p-3 rounded-lg border transition-colors hover:bg-blue-50 ${
-                      !email.is_read ? "bg-blue-50/50 border-blue-200" : "bg-white border-gray-200"
+                    className={`w-full text-left p-3.5 rounded-2xl border transition-all duration-200 hover:shadow-sm hover:-translate-y-px ${
+                      !email.is_read ? "bg-white border-gray-200/80 shadow-sm" : "bg-white/60 border-gray-100/80"
                     }`}
                   >
                     <div className="flex items-start justify-between">
@@ -229,13 +235,14 @@ export function EmailInbox({
                 {allEmails.map((item, i) => (
                   <div
                     key={`${item.type}-${i}`}
-                    className={`p-3 rounded-lg border text-sm ${
+                    className={`p-3.5 rounded-2xl border text-sm cursor-pointer transition-all duration-200 hover:shadow-sm hover:-translate-y-px ${
                       item.type === "received"
-                        ? "bg-blue-50/50 border-blue-200 cursor-pointer hover:bg-blue-50"
-                        : "bg-white border-gray-200"
+                        ? "bg-white border-gray-200/80 shadow-sm"
+                        : "bg-white/60 border-gray-100/80"
                     }`}
                     onClick={() => {
                       if (item.type === "received") setSelectedReceived(item.data as ReceivedEmail);
+                      else setSelectedSent(item.data as SentEmail);
                     }}
                   >
                     <div className="flex items-center gap-2">
@@ -262,13 +269,72 @@ export function EmailInbox({
         </CardContent>
       </Card>
 
-      {/* Email Detail Dialog */}
+      {/* Sent Email Detail Dialog */}
+      {selectedSent && (
+        <div
+          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedSent(null)}
+        >
+          <Card className="w-full max-w-3xl max-h-[80vh] overflow-auto rounded-2xl border-0 shadow-2xl shadow-black/10 bg-white/95 backdrop-blur-xl" onClick={(e) => e.stopPropagation()}>
+            <CardHeader>
+              <div className="flex items-start justify-between">
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="text-base">{selectedSent.subject}</CardTitle>
+                  <p className="text-sm text-gray-500 mt-1">
+                    An: <span className="font-medium">{selectedSent.company_name || selectedSent.recipient_email}</span>
+                    <span className="text-gray-400 ml-1">&lt;{selectedSent.recipient_email}&gt;</span>
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-gray-400">
+                      {selectedSent.sent_at ? new Date(selectedSent.sent_at).toLocaleString("de-DE") : "-"}
+                    </span>
+                    <Badge variant="outline" className="text-xs">
+                      {selectedSent.source === "scan" ? "📸 Scan" : selectedSent.source === "manual" ? "✍️ Manuell" : "🤖 Auto"}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={selectedSent.status === "sent" ? "text-green-600 border-green-200" : "text-red-500 border-red-200"}
+                    >
+                      {selectedSent.status === "sent" ? "✅ Gesendet" : "❌ Fehler"}
+                    </Badge>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedSent(null)}
+                  className="text-gray-400 hover:text-gray-600 text-lg ml-2"
+                >
+                  ✕
+                </button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {selectedSent.body_html ? (
+                <div
+                  className="bg-white rounded-lg border p-4 text-sm"
+                  dangerouslySetInnerHTML={{ __html: selectedSent.body_html }}
+                />
+              ) : (
+                <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-400 text-center">
+                  Email-Inhalt nicht verfügbar (wurde vor dem Update gesendet)
+                </div>
+              )}
+              {selectedSent.error_message && (
+                <div className="mt-3 p-3 bg-red-50 rounded-lg text-sm text-red-600">
+                  <strong>Fehler:</strong> {selectedSent.error_message}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Received Email Detail Dialog */}
       {selectedReceived && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4"
           onClick={() => setSelectedReceived(null)}
         >
-          <Card className="w-full max-w-2xl max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+          <Card className="w-full max-w-2xl max-h-[80vh] overflow-auto rounded-2xl border-0 shadow-2xl shadow-black/10 bg-white/95 backdrop-blur-xl" onClick={(e) => e.stopPropagation()}>
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div className="min-w-0 flex-1">

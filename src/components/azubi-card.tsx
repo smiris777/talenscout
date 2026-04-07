@@ -22,16 +22,16 @@ export function AzubiCard({ azubi }: AzubiCardProps) {
 
   return (
     <Link href={`/azubi/${azubi.id}`}>
-      <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
+      <Card className="hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 cursor-pointer h-full rounded-2xl border-0 bg-white/80 backdrop-blur-sm shadow-sm shadow-black/[0.03]">
+        <CardContent className="p-5">
+          <div className="flex items-start gap-3.5">
             {/* Photo or Initials */}
             <div className="flex-shrink-0">
               {photoUrl ? (
                 <img
                   src={photoUrl}
                   alt={azubi.name}
-                  className="w-14 h-14 rounded-full object-cover bg-gray-100"
+                  className="w-12 h-12 rounded-2xl object-cover bg-gray-100"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
                     target.style.display = "none";
@@ -40,7 +40,7 @@ export function AzubiCard({ azubi }: AzubiCardProps) {
                 />
               ) : null}
               <div
-                className={`w-14 h-14 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-lg font-semibold ${photoUrl ? "hidden" : ""}`}
+                className={`w-12 h-12 rounded-2xl bg-gray-100 text-gray-500 flex items-center justify-center text-base font-semibold ${photoUrl ? "hidden" : ""}`}
               >
                 {getInitials(azubi.name)}
               </div>
@@ -48,27 +48,27 @@ export function AzubiCard({ azubi }: AzubiCardProps) {
 
             {/* Info */}
             <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-gray-900 truncate">
+              <h3 className="font-semibold text-[#1d1d1f] truncate text-[15px]">
                 {azubi.name}
               </h3>
-              <p className="text-sm text-gray-600 truncate mt-0.5">
+              <p className="text-sm text-gray-400 truncate mt-0.5">
                 {azubi.ziel || "Kein Ziel angegeben"}
               </p>
             </div>
 
             {/* Video indicator */}
             {azubi.videoLink && (
-              <span className="text-lg" title="Bewerbungsvideo vorhanden">
+              <span className="text-sm opacity-40" title="Bewerbungsvideo vorhanden">
                 🎬
               </span>
             )}
           </div>
 
           {/* Badges */}
-          <div className="flex flex-wrap gap-1.5 mt-3">
+          <div className="flex flex-wrap gap-1.5 mt-3.5">
             <Badge
               variant="secondary"
-              className={`text-xs ${statusColor.bg} ${statusColor.text} border-0`}
+              className={`text-xs rounded-full ${statusColor.bg} ${statusColor.text} border-0`}
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${statusColor.dot} mr-1`}
@@ -78,13 +78,13 @@ export function AzubiCard({ azubi }: AzubiCardProps) {
             {azubi.deutschNiveau && (
               <Badge
                 variant="secondary"
-                className={`text-xs ${niveauColor} border-0`}
+                className={`text-xs rounded-full ${niveauColor} border-0`}
               >
                 {azubi.deutschNiveau}
               </Badge>
             )}
             {azubi.art && (
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="text-xs rounded-full border-gray-200/80">
                 {azubi.art}
               </Badge>
             )}
@@ -92,7 +92,7 @@ export function AzubiCard({ azubi }: AzubiCardProps) {
 
           {/* Application count */}
           {azubi.bewerbungenCount > 0 && (
-            <div className="mt-3 text-xs text-gray-500">
+            <div className="mt-3.5 text-xs text-gray-400 font-medium">
               {azubi.bewerbungenCount.toLocaleString("de-DE")} Bewerbungen
             </div>
           )}

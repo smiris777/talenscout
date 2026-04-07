@@ -20,28 +20,22 @@ export default async function AdminPage() {
 
   if (profile?.role !== "administrator") {
     return (
-      <div className="text-center py-16">
-        <h2 className="text-xl font-semibold text-red-600">Zugriff verweigert</h2>
-        <p className="text-gray-500 mt-2">Nur Administratoren haben Zugang zu dieser Seite.</p>
+      <div className="text-center py-20">
+        <h2 className="text-xl font-semibold text-[#1d1d1f]">Zugriff verweigert</h2>
+        <p className="text-sm text-gray-400 mt-2">Nur Administratoren haben Zugang zu dieser Seite.</p>
       </div>
     );
   }
 
-  // Fetch all azubis for admin management
-  const { data: azubis } = await supabase
-    .from("ausbildung_main_engine")
-    .select(`id, "Student ID", "Namen", "Email", "Ziel", "Aktiv", "Deutsch Niveau", "Art", sichtbar, drive_folder_id, user_id, monthly_credit, credit_auto_refill, student_active, daily_email_enabled, gmail_app_password_set`)
-    .order("Namen", { ascending: true });
-
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Admin-Verwaltung</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Bewerber-Status ändern und Sichtbarkeit verwalten
+        <h2 className="text-2xl font-bold text-gray-900">Admin-Dashboard</h2>
+        <p className="text-sm text-gray-400 mt-1">
+          Studenten verwalten, Credits zuweisen, E-Mail-Status pruefen
         </p>
       </div>
-      <AdminDashboard azubis={azubis || []} />
+      <AdminDashboard />
     </div>
   );
 }

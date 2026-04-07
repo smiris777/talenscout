@@ -6,6 +6,89 @@ import { ImapFlow } from "imapflow";
 
 export const runtime = "nodejs";
 
+// Decode Quoted-Printable encoding (=FC → ü, =E4 → ä, etc.)
+function decodeQuotedPrintable(str: string): string {
+  // Remove soft line breaks (= at end of line)
+  let decoded = str.replace(/=\r?\n/g, "");
+  // Decode =XX hex sequences
+  decoded = decoded.replace(/=([0-9A-Fa-f]{2})/g, (_, hex) => {
+    return String.fromCharCode(parseInt(hex, 16));
+  });
+  // Try to convert from latin1 to utf8 if needed
+  try {
+    const bytes = new Uint8Array([...decoded].map(c => c.charCodeAt(0)));
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return text;
+  } catch {
+    // If not valid UTF-8, try latin1
+    try {
+      const bytes = new Uint8Array([...decoded].map(c => c.charCodeAt(0)));
+      return new TextDecoder("iso-8859-1").decode(bytes);
+    } catch {
+      return decoded;
+    }
+  }
+}
+
+// Decode Base64 encoded email body
+function decodeBase64Body(str: string, charset: string = "utf-8"): string {
+  try {
+    const cleaned = str.replace(/\r?\n/g, "");
+    const bytes = Buffer.from(cleaned, "base64");
+    return new TextDecoder(charset || "utf-8").decode(bytes);
+  } catch {
+    return str;
+  }
+}
+
+// Extract and decode email body from raw MIME source
+function decodeEmailBody(source: string): string {
+  // Find text/plain part
+  const textRegex = /Content-Type:\s*text\/plain[^\r\n]*(?:;\s*charset="?([^";\s]+)"?)?[^]*?Content-Transfer-Encoding:\s*(\S+)[^]*?\r\n\r\n([^]*?)(?:\r\n--|\r\n\.\r\n|$)/i;
+  let match = source.match(textRegex);
+
+  if (!match) {
+    // Try without Content-Transfer-Encoding header
+    const simpleRegex = /Content-Type:\s*text\/plain[^\r\n]*(?:;\s*charset="?([^";\s]+)"?)?[^]*?\r\n\r\n([^]*?)(?:\r\n--|\r\n\.\r\n|$)/i;
+    const simpleMatch = source.match(simpleRegex);
+    if (simpleMatch) {
+      return simpleMatch[2].substring(0, 2000);
+    }
+  }
+
+  if (match) {
+    const charset = match[1] || "utf-8";
+    const encoding = match[2]?.toLowerCase() || "";
+    const body = match[3];
+
+    if (encoding === "quoted-printable") {
+      return decodeQuotedPrintable(body).substring(0, 2000);
+    } else if (encoding === "base64") {
+      return decodeBase64Body(body, charset).substring(0, 2000);
+    }
+    return body.substring(0, 2000);
+  }
+
+  // Fallback: try HTML
+  const htmlRegex = /Content-Type:\s*text\/html[^\r\n]*(?:;\s*charset="?([^";\s]+)"?)?[^]*?Content-Transfer-Encoding:\s*(\S+)[^]*?\r\n\r\n([^]*?)(?:\r\n--|\r\n\.\r\n|$)/i;
+  match = source.match(htmlRegex);
+  if (match) {
+    const charset = match[1] || "utf-8";
+    const encoding = match[2]?.toLowerCase() || "";
+    let body = match[3];
+
+    if (encoding === "quoted-printable") {
+      body = decodeQuotedPrintable(body);
+    } else if (encoding === "base64") {
+      body = decodeBase64Body(body, charset);
+    }
+    // Strip HTML tags
+    return body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().substring(0, 2000);
+  }
+
+  return "";
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -94,21 +177,11 @@ export async function POST(request: Request) {
         const subject = msg.envelope?.subject || "(Kein Betreff)";
         const receivedAt = msg.envelope?.date || new Date();
 
-        // Extract text from source
+        // Extract and decode text from source
         let bodyText = "";
         if (msg.source) {
           const source = msg.source.toString();
-          // Simple text extraction from email source
-          const textMatch = source.match(/Content-Type:\s*text\/plain[^]*?\r\n\r\n([^]*?)(?:\r\n--|\r\n\.\r\n|$)/i);
-          if (textMatch) {
-            bodyText = textMatch[1].substring(0, 2000);
-          } else {
-            // Try to extract from HTML
-            const htmlMatch = source.match(/Content-Type:\s*text\/html[^]*?\r\n\r\n([^]*?)(?:\r\n--|\r\n\.\r\n|$)/i);
-            if (htmlMatch) {
-              bodyText = htmlMatch[1].replace(/<[^>]+>/g, "").substring(0, 2000);
-            }
-          }
+          bodyText = decodeEmailBody(source);
         }
 
         await adminSupabase.from("email_received_log").insert({

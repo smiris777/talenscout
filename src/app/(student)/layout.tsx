@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StudentNavBar } from "@/components/student-nav-bar";
+import { awardXP } from "@/lib/rewards/engine";
 
 export default async function StudentLayout({
   children,
@@ -73,9 +74,15 @@ export default async function StudentLayout({
   // Get streak
   const { data: streak } = await supabase
     .from("student_streaks")
-    .select("current_streak")
+    .select("current_streak, last_activity_date")
     .eq("student_id", user.id)
     .single();
+
+  // Award daily login XP (once per day)
+  const today = new Date().toISOString().split("T")[0];
+  if (!streak || streak.last_activity_date !== today) {
+    awardXP(user.id, "daily_login", "Tägliches Login", 10).catch(() => {});
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

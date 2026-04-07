@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { normalizeAzubi } from "@/lib/utils/normalize";
 import { AzubiRaw } from "@/types/database";
 import { StatsBar } from "@/components/stats-bar";
@@ -34,8 +36,14 @@ const AZUBI_COLUMNS = `
 export default async function DashboardPage() {
   const supabase = await createClient();
 
+  // Use service role to bypass RLS (admins + recruiters need to see all students)
+  const adminSupabase = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
   // Fetch all azubis
-  const { data: rawAzubis, error } = await supabase
+  const { data: rawAzubis, error } = await adminSupabase
     .from("ausbildung_main_engine")
     .select(AZUBI_COLUMNS)
     .order("Namen", { ascending: true });
@@ -49,7 +57,7 @@ export default async function DashboardPage() {
   }
 
   // Fetch application counts per user_id
-  const { data: bewerbungenCounts } = await supabase
+  const { data: bewerbungenCounts } = await adminSupabase
     .from("bewerbungen")
     .select("student_user_id");
 
@@ -73,8 +81,8 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Azubi-Übersicht</h2>
-        <p className="text-sm text-gray-500 mt-1">
+        <h2 className="text-3xl font-semibold text-[#1d1d1f] tracking-tight">Azubi-Übersicht</h2>
+        <p className="text-sm text-gray-400 mt-1.5 font-medium">
           {azubis.length} Kandidaten im System
         </p>
       </div>

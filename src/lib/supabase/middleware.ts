@@ -51,7 +51,6 @@ export async function updateSession(request: NextRequest) {
       .single();
 
     const role = profile?.role;
-
     // Students (bewerber) cannot access recruiter/admin dashboard
     if (role === "bewerber") {
       if (pathname === "/" || pathname.startsWith("/admin") || pathname.startsWith("/azubi")) {
@@ -69,7 +68,7 @@ export async function updateSession(request: NextRequest) {
 
     // Recruiters/Admins cannot access student pages
     if (role === "recruiter" || role === "administrator") {
-      const studentPaths = ["/dashboard", "/bewerbungen", "/aufgaben", "/email-setup"];
+      const studentPaths = ["/dashboard", "/bewerbungen", "/aufgaben", "/email-setup", "/scan"];
       if (studentPaths.some(p => pathname === p || pathname.startsWith(p + "/")) || pathname.startsWith("/student")) {
         const url = request.nextUrl.clone();
         url.pathname = "/";

@@ -47,20 +47,20 @@ export function FilterBar({
 }: FilterBarProps) {
   return (
     <div className="space-y-3">
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-2.5">
         <div className="flex-1">
           <Input
             placeholder="Suche nach Name, Beruf oder E-Mail..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full"
+            className="w-full h-10 rounded-xl bg-white/80 border-gray-200/60 text-sm placeholder:text-gray-300 focus:bg-white focus:ring-2 focus:ring-gray-900/10 focus:border-gray-300"
           />
         </div>
         <Select value={statusFilter} onValueChange={(val) => onStatusChange(val ?? "")}>
-          <SelectTrigger className="w-full sm:w-[180px]">
+          <SelectTrigger className="w-full sm:w-[180px] h-10 rounded-xl bg-white/80 border-gray-200/60 text-sm">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="rounded-xl border-gray-200/60 shadow-lg shadow-black/[0.08]">
             <SelectItem value="alle">Alle Status</SelectItem>
             {statusOptions.map((status) => (
               <SelectItem key={status} value={status}>
@@ -70,10 +70,10 @@ export function FilterBar({
           </SelectContent>
         </Select>
         <Select value={niveauFilter} onValueChange={(val) => onNiveauChange(val ?? "")}>
-          <SelectTrigger className="w-full sm:w-[140px]">
+          <SelectTrigger className="w-full sm:w-[140px] h-10 rounded-xl bg-white/80 border-gray-200/60 text-sm">
             <SelectValue placeholder="Deutsch" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="rounded-xl border-gray-200/60 shadow-lg shadow-black/[0.08]">
             <SelectItem value="alle">Alle Niveaus</SelectItem>
             {niveauOptions.map((niveau) => (
               <SelectItem key={niveau} value={niveau}>
@@ -83,10 +83,10 @@ export function FilterBar({
           </SelectContent>
         </Select>
         <Select value={artFilter} onValueChange={(val) => onArtChange(val ?? "")}>
-          <SelectTrigger className="w-full sm:w-[140px]">
+          <SelectTrigger className="w-full sm:w-[140px] h-10 rounded-xl bg-white/80 border-gray-200/60 text-sm">
             <SelectValue placeholder="Art" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="rounded-xl border-gray-200/60 shadow-lg shadow-black/[0.08]">
             <SelectItem value="alle">Alle Arten</SelectItem>
             {artOptions.map((art) => (
               <SelectItem key={art} value={art}>
@@ -97,13 +97,13 @@ export function FilterBar({
         </Select>
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-sm text-gray-500">
+        <span className="text-xs text-gray-400 font-medium">
           {hasFilters
             ? `${resultCount} von ${totalCount} Kandidaten`
             : `${totalCount} Kandidaten`}
         </span>
         {hasFilters && (
-          <Button variant="ghost" size="sm" onClick={onClear}>
+          <Button variant="ghost" size="sm" onClick={onClear} className="text-xs text-gray-400 hover:text-[#1d1d1f] rounded-full">
             Filter zurücksetzen
           </Button>
         )}

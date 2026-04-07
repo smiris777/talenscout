@@ -155,6 +155,7 @@ export async function applyToJobListing(listingId: string) {
       sequence_step: 1,
       sent_at: new Date().toISOString(),
       source: "scan",
+      body_html: html,
     });
 
     // Also insert into bewerbungen for tracking (ignore duplicate)

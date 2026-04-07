@@ -7,11 +7,12 @@ import { buildApplicationEmail } from "@/lib/email/template";
 import { getGDriveThumbnailUrl } from "@/lib/utils/normalize";
 import { createCallTaskIfPhoneAvailable } from "@/lib/tasks/generator";
 import { getMatchingBereiche } from "@/lib/email/bereich-mapping";
+import { awardXP } from "@/lib/rewards/engine";
 
 export const runtime = "nodejs";
 
 const MAX_DAILY_EMAILS = 12;
-const DELAY_BETWEEN_SENDS_MS = 3000;
+const DELAY_BETWEEN_SENDS_MS = 1500;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -45,7 +46,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ message: "No active students", results: [] });
   }
 
-  for (const student of students) {
+  // Round-robin per hour: each run processes the student whose turn it is
+  const now = new Date();
+  const hourSlot = now.getUTCHours(); // 7–16
+  const dayOfYear = Math.floor((Date.now() - new Date(now.getUTCFullYear(), 0, 0).getTime()) / 86400000);
+  // Unique slot per run: combine day offset + hour offset
+  const slotIndex = (dayOfYear * 10 + (hourSlot - 7)) % students.length;
+  const rotated = [...students.slice(slotIndex), ...students.slice(0, slotIndex)];
+
+  for (const student of rotated) {
     if (!student.user_id) continue;
 
     let sentCount = 0;
@@ -112,14 +121,19 @@ export async function GET(request: Request) {
 
       // Smart matching: use bereich mapping for fuzzy matching
       if (studentZiel) {
-        const bereiche = getMatchingBereiche(studentZiel);
+        const bereiche = getMatchingBereiche(studentZiel)
+          // Remove values with special chars that break PostgREST OR syntax
+          .filter((b) => /^[a-zA-ZäöüÄÖÜß0-9\s\-]+$/.test(b));
         if (bereiche.length > 0) {
           const orFilter = bereiche.map((b) => `bereich.ilike.%${b}%`).join(",");
           companiesQuery = companiesQuery.or(orFilter);
         }
       }
 
-      const { data: companies } = await companiesQuery.limit(500);
+      const { data: companies, error: companiesError } = await companiesQuery.limit(500);
+      if (companiesError) {
+        console.error("Companies query error:", companiesError.message);
+      }
 
       const uniqueCompanies = new Map<string, any>();
       for (const c of companies || []) {
@@ -187,7 +201,11 @@ export async function GET(request: Request) {
             status: "sent",
             sequence_step: 1,
             sent_at: new Date().toISOString(),
+            body_html: html,
           });
+
+          // Award XP for email sent
+          await awardXP(student.user_id, "email_sent", `Bewerbung an ${target.firmenname || target.email}`, 15).catch(() => {});
 
           // Create call task if phone available
           await createCallTaskIfPhoneAvailable(

@@ -102,6 +102,7 @@ export async function POST(request: Request) {
       status: "sent",
       sequence_step: 1,
       sent_at: new Date().toISOString(),
+      body_html: html,
     });
 
     return NextResponse.json({ success: true, message: `Bewerbung an ${firmenname} gesendet!` });

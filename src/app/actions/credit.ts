@@ -1,22 +1,29 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 
-export async function updateMonthlyCredit(studentId: number, credit: number) {
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("ausbildung_main_engine")
-    .update({ monthly_credit: credit })
-    .eq("id", studentId);
+function getAdminSupabase() {
+  return createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
-  if (error) throw new Error(error.message);
-  revalidatePath("/admin");
+async function requireAdmin() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Nicht eingeloggt");
+  const admin = getAdminSupabase();
+  const { data: profile } = await admin.from("user_profiles").select("role").eq("id", user.id).single();
+  if (profile?.role !== "administrator") throw new Error("Keine Admin-Berechtigung");
+  return admin;
 }
 
 export async function setOneTimeCredit(studentId: number, amount: number) {
-  const supabase = await createClient();
-  const { error } = await supabase
+  const admin = await requireAdmin();
+  const { error } = await admin
     .from("ausbildung_main_engine")
     .update({ monthly_credit: amount, credit_auto_refill: 0 })
     .eq("id", studentId);
@@ -26,8 +33,8 @@ export async function setOneTimeCredit(studentId: number, amount: number) {
 }
 
 export async function setRecurringCredit(studentId: number, amount: number) {
-  const supabase = await createClient();
-  const { error } = await supabase
+  const admin = await requireAdmin();
+  const { error } = await admin
     .from("ausbildung_main_engine")
     .update({ monthly_credit: amount, credit_auto_refill: amount })
     .eq("id", studentId);
@@ -37,8 +44,8 @@ export async function setRecurringCredit(studentId: number, amount: number) {
 }
 
 export async function blockStudent(studentId: number) {
-  const supabase = await createClient();
-  const { error } = await supabase
+  const admin = await requireAdmin();
+  const { error } = await admin
     .from("ausbildung_main_engine")
     .update({
       monthly_credit: 0,
@@ -53,8 +60,8 @@ export async function blockStudent(studentId: number) {
 }
 
 export async function toggleStudentActive(studentId: number, active: boolean) {
-  const supabase = await createClient();
-  const { error } = await supabase
+  const admin = await requireAdmin();
+  const { error } = await admin
     .from("ausbildung_main_engine")
     .update({ student_active: active })
     .eq("id", studentId);
@@ -64,8 +71,8 @@ export async function toggleStudentActive(studentId: number, active: boolean) {
 }
 
 export async function toggleDailyEmail(studentId: number, enabled: boolean) {
-  const supabase = await createClient();
-  const { error } = await supabase
+  const admin = await requireAdmin();
+  const { error } = await admin
     .from("ausbildung_main_engine")
     .update({ daily_email_enabled: enabled })
     .eq("id", studentId);

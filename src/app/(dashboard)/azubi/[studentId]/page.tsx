@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { normalizeAzubi } from "@/lib/utils/normalize";
 import { AzubiRaw } from "@/types/database";
 import { AzubiDetail } from "@/components/azubi-detail";
@@ -39,8 +40,12 @@ export default async function AzubiPage({
 }) {
   const { studentId } = await params;
   const supabase = await createClient();
+  const adminSupabase = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
 
-  const { data: rawAzubi, error } = await supabase
+  const { data: rawAzubi, error } = await adminSupabase
     .from("ausbildung_main_engine")
     .select(AZUBI_COLUMNS)
     .eq("id", parseInt(studentId))
@@ -62,7 +67,7 @@ export default async function AzubiPage({
   // Get application count
   let bewerbungenCount = 0;
   if ((rawAzubi as AzubiRaw).user_id) {
-    const { count } = await supabase
+    const { count } = await adminSupabase
       .from("bewerbungen")
       .select("id", { count: "exact", head: true })
       .eq("student_user_id", (rawAzubi as AzubiRaw).user_id!);
@@ -81,7 +86,7 @@ export default async function AzubiPage({
     geschlecht: string | null;
   }> = [];
   if ((rawAzubi as AzubiRaw).user_id) {
-    const { data } = await supabase
+    const { data } = await adminSupabase
       .from("bewerbungen")
       .select("firmenname, email, name, telefonnummer, bewerbungsdatum, status, bereich, geschlecht")
       .eq("student_user_id", (rawAzubi as AzubiRaw).user_id!)

@@ -39,15 +39,15 @@ export function AzubiDetail({ azubi, recentApplications }: AzubiDetailProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <Card>
-        <CardContent className="p-6">
+      <Card className="rounded-2xl border-0 bg-white/80 backdrop-blur-sm shadow-sm shadow-black/[0.03]">
+        <CardContent className="p-7">
           <div className="flex flex-col sm:flex-row items-start gap-6">
             <div className="flex-shrink-0">
               {photoUrl ? (
                 <img
                   src={photoUrl}
                   alt={azubi.name}
-                  className="w-24 h-24 rounded-xl object-cover bg-gray-100"
+                  className="w-24 h-24 rounded-2xl object-cover bg-gray-100 shadow-sm"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
                     target.style.display = "none";
@@ -56,16 +56,16 @@ export function AzubiDetail({ azubi, recentApplications }: AzubiDetailProps) {
                 />
               ) : null}
               <div
-                className={`w-24 h-24 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-3xl font-semibold ${photoUrl ? "hidden" : ""}`}
+                className={`w-24 h-24 rounded-2xl bg-gray-100 text-gray-500 flex items-center justify-center text-3xl font-semibold ${photoUrl ? "hidden" : ""}`}
               >
                 {getInitials(azubi.name)}
               </div>
             </div>
 
             <div className="flex-1">
-              <h1 className="text-2xl font-bold text-gray-900">{azubi.name}</h1>
-              <p className="text-lg text-gray-600 mt-1">{azubi.ziel}</p>
-              <p className="text-sm text-gray-500 mt-1">{azubi.email}</p>
+              <h1 className="text-3xl font-semibold text-[#1d1d1f] tracking-tight">{azubi.name}</h1>
+              <p className="text-lg text-gray-400 mt-1">{azubi.ziel}</p>
+              <p className="text-sm text-gray-400 mt-1">{azubi.email}</p>
 
               <div className="flex flex-wrap gap-2 mt-3">
                 <Badge
@@ -98,9 +98,9 @@ export function AzubiDetail({ azubi, recentApplications }: AzubiDetailProps) {
               </div>
 
               {driveFolderUrl && (
-                <div className="mt-4">
+                <div className="mt-5">
                   <a href={driveFolderUrl} target="_blank" rel="noopener noreferrer">
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" className="rounded-full border-gray-200/80 text-gray-500 hover:text-[#1d1d1f] hover:bg-gray-50 hover:border-gray-300/80 text-xs">
                       📁 Google Drive Ordner öffnen
                     </Button>
                   </a>
@@ -113,7 +113,7 @@ export function AzubiDetail({ azubi, recentApplications }: AzubiDetailProps) {
 
       {/* Tabs */}
       <Tabs defaultValue={videoEmbedUrl ? "video" : "profil"}>
-        <TabsList className="w-full justify-start flex-wrap h-auto gap-1">
+        <TabsList className="w-full justify-start flex-wrap h-auto gap-1 bg-gray-100/80 rounded-full p-1">
           {videoEmbedUrl && <TabsTrigger value="video">Video</TabsTrigger>}
           <TabsTrigger value="profil">Profil</TabsTrigger>
           <TabsTrigger value="lebenslauf">Lebenslauf</TabsTrigger>
@@ -126,9 +126,9 @@ export function AzubiDetail({ azubi, recentApplications }: AzubiDetailProps) {
 
         {videoEmbedUrl && (
           <TabsContent value="video">
-            <Card>
+            <Card className="rounded-2xl border-0 bg-white/80 backdrop-blur-sm shadow-sm shadow-black/[0.03]">
               <CardHeader>
-                <CardTitle>Bewerbungsvideo</CardTitle>
+                <CardTitle className="text-lg font-semibold text-[#1d1d1f] tracking-tight">Bewerbungsvideo</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="aspect-video rounded-lg overflow-hidden bg-black">
@@ -146,9 +146,9 @@ export function AzubiDetail({ azubi, recentApplications }: AzubiDetailProps) {
         )}
 
         <TabsContent value="profil">
-          <Card>
+          <Card className="rounded-2xl border-0 bg-white/80 backdrop-blur-sm shadow-sm shadow-black/[0.03]">
             <CardHeader>
-              <CardTitle>Profil</CardTitle>
+              <CardTitle className="text-lg font-semibold text-[#1d1d1f] tracking-tight">Profil</CardTitle>
             </CardHeader>
             <CardContent>
               {azubi.profil ? (
@@ -173,10 +173,10 @@ export function AzubiDetail({ azubi, recentApplications }: AzubiDetailProps) {
         </TabsContent>
 
         <TabsContent value="lebenslauf">
-          <Card>
+          <Card className="rounded-2xl border-0 bg-white/80 backdrop-blur-sm shadow-sm shadow-black/[0.03]">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Lebenslauf</CardTitle>
+                <CardTitle className="text-lg font-semibold text-[#1d1d1f] tracking-tight">Lebenslauf</CardTitle>
                 {driveFolderUrl && (
                   <a href={driveFolderUrl} target="_blank" rel="noopener noreferrer">
                     <Button variant="outline" size="sm">
@@ -202,9 +202,9 @@ export function AzubiDetail({ azubi, recentApplications }: AzubiDetailProps) {
         </TabsContent>
 
         <TabsContent value="motivation">
-          <Card>
+          <Card className="rounded-2xl border-0 bg-white/80 backdrop-blur-sm shadow-sm shadow-black/[0.03]">
             <CardHeader>
-              <CardTitle>Motivationsschreiben</CardTitle>
+              <CardTitle className="text-lg font-semibold text-[#1d1d1f] tracking-tight">Motivationsschreiben</CardTitle>
             </CardHeader>
             <CardContent>
               {azubi.motivationsschreiben ? (
@@ -222,9 +222,9 @@ export function AzubiDetail({ azubi, recentApplications }: AzubiDetailProps) {
 
         {driveFolderUrl && (
           <TabsContent value="dokumente">
-            <Card>
+            <Card className="rounded-2xl border-0 bg-white/80 backdrop-blur-sm shadow-sm shadow-black/[0.03]">
               <CardHeader>
-                <CardTitle>Dokumente</CardTitle>
+                <CardTitle className="text-lg font-semibold text-[#1d1d1f] tracking-tight">Dokumente</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-gray-600 mb-4">
@@ -242,9 +242,9 @@ export function AzubiDetail({ azubi, recentApplications }: AzubiDetailProps) {
         )}
 
         <TabsContent value="bewerbungen">
-          <Card>
+          <Card className="rounded-2xl border-0 bg-white/80 backdrop-blur-sm shadow-sm shadow-black/[0.03]">
             <CardHeader>
-              <CardTitle>Letzte Bewerbungen</CardTitle>
+              <CardTitle className="text-lg font-semibold text-[#1d1d1f] tracking-tight">Letzte Bewerbungen</CardTitle>
             </CardHeader>
             <CardContent>
               {recentApplications.length > 0 ? (

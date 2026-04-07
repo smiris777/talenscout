@@ -72,7 +72,7 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
+  --radius: 0.75rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -123,8 +123,89 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    background-color: #f5f5f7;
+    color: #1d1d1f;
   }
   html {
     @apply font-sans;
+    scroll-behavior: smooth;
+  }
+
+  /* Apple-style global overrides */
+
+  /* Smooth transitions everywhere */
+  button, a, input, select, textarea, [role="button"] {
+    @apply transition-all duration-200;
+  }
+
+  /* Apple-style cards */
+  [data-slot="card"],
+  .card {
+    @apply rounded-2xl border-0 bg-white/80 backdrop-blur-sm;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.04);
+  }
+
+  /* Apple-style inputs */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea,
+  [data-slot="select-trigger"] {
+    @apply rounded-xl border-gray-200/80 bg-gray-50/50;
+    transition: all 0.2s ease;
+  }
+  input:not([type="checkbox"]):not([type="radio"]):focus,
+  select:focus,
+  textarea:focus {
+    @apply ring-2 ring-gray-900/10 border-gray-300;
+    box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.04);
+  }
+
+  /* Apple-style badges */
+  [data-slot="badge"] {
+    @apply rounded-full font-medium;
+  }
+
+  /* Apple-style tables */
+  table {
+    @apply text-sm;
+  }
+  table thead tr {
+    @apply border-b border-gray-100;
+  }
+  table tbody tr {
+    @apply border-b border-gray-50 transition-colors;
+  }
+  table tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+  }
+  table th {
+    @apply text-xs font-medium text-gray-400 uppercase tracking-wider;
+  }
+
+  /* Apple-style scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.25);
+  }
+
+  /* Apple-style tab triggers */
+  [data-slot="tabs-trigger"] {
+    @apply rounded-full text-sm font-medium;
+  }
+  [data-slot="tabs-list"] {
+    @apply bg-gray-100/80 rounded-full p-1;
   }
 }

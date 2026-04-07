@@ -40,11 +40,11 @@ export function StatsBar({ azubis, filteredCount }: StatsBarProps) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
       {stats.map((stat) => (
-        <Card key={stat.label} className="p-4">
-          <div className={`text-2xl font-bold ${stat.color}`}>
+        <Card key={stat.label} className="p-5 rounded-2xl border-0 bg-white/80 backdrop-blur-sm shadow-sm shadow-black/[0.03] hover:shadow-md transition-all duration-300">
+          <div className={`text-3xl font-semibold tracking-tight ${stat.color}`}>
             {stat.value}
           </div>
-          <div className="text-xs text-gray-500 mt-1">{stat.label}</div>
+          <div className="text-xs text-gray-400 mt-1.5 font-medium">{stat.label}</div>
         </Card>
       ))}
     </div>
