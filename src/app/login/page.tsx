@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,6 +90,15 @@ export default function LoginPage() {
               <Button type="submit" className="w-full h-11 rounded-full bg-[#1d1d1f] hover:bg-black text-white text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200" disabled={loading}>
                 {loading ? "Anmelden..." : "Anmelden"}
               </Button>
+
+              <div className="text-center pt-1">
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  Passwort vergessen?
+                </Link>
+              </div>
             </form>
           </CardContent>
         </Card>

@@ -100,6 +100,14 @@ export function StudentNavBar({
 
             <span className="text-sm text-gray-600 hidden md:block">{userName}</span>
 
+            <Link
+              href="/passwort"
+              className="text-sm text-gray-400 hover:text-gray-600 px-2 py-1 rounded-md hover:bg-gray-50 transition-colors hidden sm:block"
+              title="Passwort ändern"
+            >
+              🔑
+            </Link>
+
             <button
               onClick={handleLogout}
               className="text-sm text-gray-500 hover:text-gray-700 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors"
