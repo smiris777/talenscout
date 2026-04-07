@@ -249,6 +249,14 @@ export function AdminDashboard() {
   const [sendLoading, setSendLoading] = useState(false);
   const [sendResult, setSendResult] = useState<{ sent: number; errors: number; message: string; log?: any[] } | null>(null);
 
+  // WhatsApp Login dialog
+  const [waDialog, setWaDialog] = useState<AdminAzubi | null>(null);
+  const [waPhone, setWaPhone] = useState("");
+
+  // Block confirm dialog
+  const [blockDialog, setBlockDialog] = useState<AdminAzubi | null>(null);
+  const [blockLoading, setBlockLoading] = useState(false);
+
   // SMTP
   const [smtpStatus, setSmtpStatus] = useState<Record<string, { status: "loading" | "connected" | "failed" | "no_credentials"; gmail?: string; error?: string }>>({});
 
@@ -504,16 +512,35 @@ export function AdminDashboard() {
     }
   }
 
-  /* ─── WhatsApp Login senden ─── */
+  /* ─── WhatsApp Login Dialog öffnen ─── */
 
-  function sendWhatsApp(azubi: AdminAzubi) {
-    const phone = (azubi.whatsapp || "").replace(/\D/g, "");
-    if (!phone) { alert("Keine WhatsApp-Nummer für " + azubi.Namen); return; }
-    const loginEmail = azubi.Email || "";
+  function openWaDialog(azubi: AdminAzubi) {
+    setWaDialog(azubi);
+    setWaPhone(azubi.whatsapp || "");
+  }
+
+  function sendWhatsAppFromDialog() {
+    if (!waDialog) return;
+    const phone = waPhone.replace(/\D/g, "");
+    if (!phone) { alert("Bitte WhatsApp-Nummer eingeben."); return; }
     const msg = encodeURIComponent(
-      `Hallo ${(azubi.Namen || "").split(" ")[0]} 👋\n\nHier sind deine TalentScout Login-Daten:\n\n🔗 https://talent-scout-tau.vercel.app/login\n📧 E-Mail: ${loginEmail}\n🔑 Passwort: Test1234!\n\nBitte ändere dein Passwort nach dem ersten Login.\n\nBei Fragen einfach melden! 😊`
+      `Hallo ${(waDialog.Namen || "").split(" ")[0]} 👋\n\nHier sind deine TalentScout Login-Daten:\n\n🔗 https://talent-scout-tau.vercel.app/login\n📧 E-Mail: ${waDialog.Email || ""}\n🔑 Passwort: Test1234!\n\nBitte ändere dein Passwort nach dem ersten Login.\n\nBei Fragen einfach melden! 😊`
     );
     window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+    setWaDialog(null);
+  }
+
+  /* ─── Konto sperren ─── */
+
+  async function handleBlockStudent() {
+    if (!blockDialog) return;
+    setBlockLoading(true);
+    try {
+      await blockStudent(blockDialog.id);
+      fetchData();
+      setBlockDialog(null);
+    } catch (e) { alert("Fehler: " + (e as Error).message); }
+    setBlockLoading(false);
   }
 
   /* ─── Manual email send ─── */
@@ -1147,10 +1174,9 @@ export function AdminDashboard() {
                   Login <SortIcon col="lastLogin" />
                 </th>
                 <th className="p-3 font-medium min-w-[180px]">Status</th>
-                <th className="p-3 font-medium text-center min-w-[110px]">Aktiv / Sperren</th>
                 <th className="p-3 font-medium text-center">Auto</th>
                 <th className="p-3 font-medium text-center">SMTP</th>
-                <th className="p-3 font-medium text-center min-w-[130px]">📱 Login senden</th>
+                <th className="p-3 font-medium text-center min-w-[200px]">Aktionen</th>
               </tr>
             </thead>
             <tbody>
@@ -1299,21 +1325,6 @@ export function AdminDashboard() {
                       })()}
                     </td>
 
-                    {/* Aktiv / Sperren */}
-                    <td className="p-3 text-center">
-                      <button
-                        onClick={() => handleActiveToggle(azubi.id, isActive)}
-                        disabled={isSaving}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all shadow-sm border ${
-                          isActive
-                            ? "bg-green-50 text-green-700 border-green-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
-                            : "bg-red-50 text-red-600 border-red-200 hover:bg-green-50 hover:text-green-700 hover:border-green-200"
-                        } disabled:opacity-40`}
-                      >
-                        {isActive ? "✅ Aktiv" : "🔴 Gesperrt"}
-                      </button>
-                    </td>
-
                     {/* Auto-Email toggle */}
                     <td className="p-3 text-center">
                       <div className="flex justify-center">
@@ -1326,47 +1337,66 @@ export function AdminDashboard() {
                       {azubi.user_id && hasGmail ? (
                         (() => {
                           const st = smtpStatus[azubi.user_id!];
-                          if (!st) {
-                            return (
-                              <button
-                                onClick={() => testSmtp(azubi.user_id!)}
-                                className="px-2 py-0.5 text-[11px] bg-gray-100 hover:bg-gray-200 rounded-md transition-colors text-gray-500"
-                              >
-                                Test
-                              </button>
-                            );
-                          }
+                          if (!st) return <button onClick={() => testSmtp(azubi.user_id!)} className="px-2 py-0.5 text-[11px] bg-gray-100 hover:bg-gray-200 rounded-md transition-colors text-gray-500">Test</button>;
                           if (st.status === "loading") return <span className="text-[11px] text-gray-400 animate-pulse">...</span>;
                           if (st.status === "connected") return <span className="w-2 h-2 rounded-full bg-green-500 inline-block" title="Verbunden" />;
                           if (st.status === "no_credentials") return <span className="w-2 h-2 rounded-full bg-orange-400 inline-block" title="Keine Daten" />;
                           return <span className="w-2 h-2 rounded-full bg-red-500 inline-block cursor-help" title={st.error || "Fehler"} />;
                         })()
-                      ) : (
-                        <span className="text-gray-200">-</span>
-                      )}
+                      ) : <span className="text-gray-200">-</span>}
                     </td>
 
-                    {/* WhatsApp Login senden */}
-                    <td className="p-3 text-center">
-                      {azubi.whatsapp ? (
+                    {/* ── Aktionen ── */}
+                    <td className="p-3">
+                      <div className="flex items-center gap-1.5 justify-center flex-wrap">
+
+                        {/* 1. Aktiv / Deaktivieren */}
                         <button
-                          onClick={() => sendWhatsApp(azubi)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-green-500 hover:bg-green-600 rounded-lg shadow-sm transition-all"
+                          onClick={() => handleActiveToggle(azubi.id, isActive)}
+                          disabled={isSaving}
+                          title={isActive ? "Klicken zum Deaktivieren (stoppt Emails)" : "Klicken zum Aktivieren"}
+                          className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg border transition-all disabled:opacity-40 ${
+                            isActive
+                              ? "bg-green-50 text-green-700 border-green-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+                              : "bg-red-50 text-red-600 border-red-200 hover:bg-green-50 hover:text-green-700 hover:border-green-200"
+                          }`}
                         >
-                          <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                          </svg>
-                          Login senden
+                          {isActive ? "✅ Aktiv" : "⏸ Pausiert"}
                         </button>
-                      ) : (
+
+                        {/* 2. Sichtbar / Unsichtbar */}
                         <button
-                          onClick={() => openEditModal(azubi)}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-lg transition-all"
-                          title="Keine WhatsApp-Nummer — klicken zum Hinzufügen"
+                          onClick={() => handleVisibilityToggle(azubi.id, azubi.sichtbar !== false)}
+                          disabled={isSaving}
+                          title={azubi.sichtbar !== false ? "Für Kunden unsichtbar machen" : "Wieder sichtbar machen"}
+                          className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg border transition-all disabled:opacity-40 ${
+                            azubi.sichtbar !== false
+                              ? "bg-blue-50 text-blue-600 border-blue-200 hover:bg-gray-100 hover:text-gray-500 hover:border-gray-200"
+                              : "bg-gray-100 text-gray-400 border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
+                          }`}
                         >
-                          + Nummer
+                          {azubi.sichtbar !== false ? "👁 Sichtbar" : "🙈 Versteckt"}
                         </button>
-                      )}
+
+                        {/* 3. Konto sperren */}
+                        <button
+                          onClick={() => setBlockDialog(azubi)}
+                          title="Konto komplett sperren (Credits = 0, Login gesperrt)"
+                          className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border bg-red-50 text-red-500 border-red-200 hover:bg-red-500 hover:text-white transition-all"
+                        >
+                          🚫 Sperren
+                        </button>
+
+                        {/* 4. WhatsApp Login senden */}
+                        <button
+                          onClick={() => openWaDialog(azubi)}
+                          title="Login-Daten per WhatsApp senden"
+                          className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border bg-green-500 text-white border-green-500 hover:bg-green-600 transition-all shadow-sm"
+                        >
+                          📱 Login
+                        </button>
+
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1718,14 +1748,11 @@ export function AdminDashboard() {
             {!loadingEdit && (
               <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm border-t border-gray-100 px-6 py-4 flex gap-3 justify-between items-center">
                 <div className="flex gap-2">
-                  {editModal?.mode === "edit" && form.whatsapp && (
+                  {editModal?.mode === "edit" && (
                     <button
                       onClick={() => {
-                        const phone = form.whatsapp.replace(/\D/g, "");
-                        const msg = encodeURIComponent(
-                          `Hallo ${(form.namen || "").split(" ")[0]} 👋\n\nHier sind deine TalentScout Login-Daten:\n\n🔗 https://talent-scout-tau.vercel.app/login\n📧 E-Mail: ${form.email}\n🔑 Passwort: Test1234!\n\nBei Fragen einfach melden! 😊`
-                        );
-                        window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+                        const azubi = students.find(s => s.id === editModal.engineId);
+                        if (azubi) { setEditModal(null); setTimeout(() => openWaDialog({ ...azubi, whatsapp: form.whatsapp || azubi.whatsapp }), 100); }
                       }}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-green-500 rounded-xl hover:bg-green-600 transition-all shadow-sm"
                     >
@@ -1753,6 +1780,81 @@ export function AdminDashboard() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── WhatsApp Login Dialog ─── */}
+      {waDialog && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4" onClick={() => setWaDialog(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-5 border-b border-gray-100">
+              <h3 className="text-base font-semibold text-gray-800">📱 Login-Daten per WhatsApp senden</h3>
+              <p className="text-sm text-gray-400 mt-0.5">{waDialog.Namen}</p>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              {/* Phone number */}
+              <div>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wide block mb-1.5">WhatsApp-Nummer</label>
+                <input
+                  type="tel"
+                  value={waPhone}
+                  onChange={(e) => setWaPhone(e.target.value)}
+                  placeholder="+49 170 1234567"
+                  className="w-full h-11 rounded-xl bg-gray-50 border border-gray-200 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-400"
+                  autoFocus
+                />
+              </div>
+              {/* Message preview */}
+              <div className="bg-green-50 rounded-xl p-3 text-xs text-gray-600 space-y-1 border border-green-100">
+                <p className="font-semibold text-green-700 mb-1">Nachrichtenvorschau:</p>
+                <p>Hallo {(waDialog.Namen || "").split(" ")[0]} 👋</p>
+                <p className="mt-1">Hier sind deine TalentScout Login-Daten:</p>
+                <p>🔗 talent-scout-tau.vercel.app/login</p>
+                <p>📧 {waDialog.Email || "(keine Email)"}</p>
+                <p>🔑 Passwort: Test1234!</p>
+                <p className="text-gray-400 mt-1">Bitte Passwort nach erstem Login ändern.</p>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end">
+              <button onClick={() => setWaDialog(null)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">Abbrechen</button>
+              <button
+                onClick={sendWhatsAppFromDialog}
+                disabled={!waPhone.trim()}
+                className="px-5 py-2 text-sm font-semibold text-white bg-green-500 hover:bg-green-600 rounded-xl disabled:opacity-40 transition-all shadow-sm flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                WhatsApp öffnen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Konto Sperren Bestätigung ─── */}
+      {blockDialog && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4" onClick={() => setBlockDialog(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-5">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl">🚫</span>
+              </div>
+              <h3 className="text-base font-semibold text-gray-800 text-center">Konto sperren?</h3>
+              <p className="text-sm text-gray-500 text-center mt-2">
+                <span className="font-medium text-gray-700">{blockDialog.Namen}</span> wird gesperrt:<br />
+                Credits werden auf 0 gesetzt, keine weiteren Emails.
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end">
+              <button onClick={() => setBlockDialog(null)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">Abbrechen</button>
+              <button
+                onClick={handleBlockStudent}
+                disabled={blockLoading}
+                className="px-5 py-2 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-xl disabled:opacity-50 transition-all shadow-sm"
+              >
+                {blockLoading ? "Sperren..." : "Ja, Konto sperren"}
+              </button>
+            </div>
           </div>
         </div>
       )}
