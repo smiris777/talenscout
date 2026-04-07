@@ -96,7 +96,32 @@ const STATUS_OPTIONS = [
 
 type SortKey = "name" | "credits" | "emailsTotal" | "emailsToday" | "scans" | "lastLogin";
 type SortDir = "asc" | "desc";
-type AdminTab = "studenten" | "leaderboard";
+type AdminTab = "studenten" | "leaderboard" | "aktionen" | "rewards";
+
+interface ActionItem {
+  id: string;
+  user_id: string;
+  from_email: string;
+  from_name: string | null;
+  subject: string;
+  classification: string;
+  received_at: string;
+  action_status: string | null;
+  snippet: string | null;
+  company_name: string | null;
+  studentName: string;
+  fotoLink: string | null;
+}
+
+interface RewardRule {
+  id: string;
+  source_type: string;
+  description: string | null;
+  xp_value: number;
+  rule_value: number | null;
+  is_active: boolean;
+  updated_at: string;
+}
 
 interface LeaderboardEntry {
   id: number;
@@ -204,6 +229,16 @@ export function AdminDashboard() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
 
+  // Aktions-Center
+  const [actionItems, setActionItems] = useState<ActionItem[]>([]);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [urgentCount, setUrgentCount] = useState(0);
+
+  // Reward-Rules
+  const [rewardRules, setRewardRules] = useState<RewardRule[]>([]);
+  const [rewardLoading, setRewardLoading] = useState(false);
+  const [rewardSaving, setRewardSaving] = useState<string | null>(null);
+
   // Credit dialog
   const [creditDialog, setCreditDialog] = useState<{ azubi: AdminAzubi; mode: "einmalig" | "monatlich" | "sperren" } | null>(null);
   const [creditAmount, setCreditAmount] = useState("");
@@ -247,11 +282,40 @@ export function AdminDashboard() {
     fetchData();
   }, [fetchData]);
 
+  const fetchActionCenter = useCallback(async () => {
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/admin/action-center");
+      const data = await res.json();
+      if (data.items) setActionItems(data.items);
+      if (data.urgent !== undefined) setUrgentCount(data.urgent);
+    } catch { /* silent */ }
+    setActionLoading(false);
+  }, []);
+
+  const fetchRewardRules = useCallback(async () => {
+    setRewardLoading(true);
+    try {
+      const res = await fetch("/api/admin/reward-rules");
+      const data = await res.json();
+      if (data.rules) setRewardRules(data.rules);
+    } catch { /* silent */ }
+    setRewardLoading(false);
+  }, []);
+
   useEffect(() => {
     if (activeTab === "leaderboard" && leaderboard.length === 0) {
       fetchLeaderboard();
     }
   }, [activeTab, leaderboard.length, fetchLeaderboard]);
+
+  useEffect(() => {
+    if (activeTab === "aktionen") fetchActionCenter();
+  }, [activeTab, fetchActionCenter]);
+
+  useEffect(() => {
+    if (activeTab === "rewards" && rewardRules.length === 0) fetchRewardRules();
+  }, [activeTab, rewardRules.length, fetchRewardRules]);
 
   function updateForm(field: keyof StudentFormData, value: string | number) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -449,17 +513,18 @@ export function AdminDashboard() {
   /* ─── Inline row actions ─── */
 
   async function handleStatusChange(id: number, status: string) {
-    // Optimistic update: immediately reflect in local state
+    // Optimistic update
     setStudents((prev) =>
       prev.map((s) => (s.id === id ? { ...s, Aktiv: status } : s))
     );
     setSaving(id);
     try {
       await updateAzubiStatus(id, status);
-    } catch (e) {
-      alert("Fehler: " + (e as Error).message);
-      // Revert on error
+      // Re-sync to confirm DB value
       fetchData();
+    } catch (e) {
+      alert("Fehler beim Speichern: " + (e as Error).message);
+      fetchData(); // revert optimistic update
     }
     setSaving(null);
   }
@@ -533,6 +598,60 @@ export function AdminDashboard() {
     );
   }
 
+  /* ─── Aktions-Center handlers ─── */
+
+  async function handleActionDone(emailId: string) {
+    try {
+      await fetch("/api/admin/action-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emailId, action: "done" }),
+      });
+      setActionItems((prev) => prev.filter((i) => i.id !== emailId));
+      setUrgentCount((c) => Math.max(0, c - 1));
+    } catch { /* silent */ }
+  }
+
+  async function handleCreateTask(item: ActionItem) {
+    try {
+      await fetch("/api/admin/action-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          emailId: item.id,
+          action: "create_task",
+          userId: item.user_id,
+          taskTitle: item.subject,
+          companyName: item.company_name || item.from_name,
+        }),
+      });
+      setActionItems((prev) =>
+        prev.map((i) => i.id === item.id ? { ...i, action_status: "task_created" } : i)
+      );
+    } catch { /* silent */ }
+  }
+
+  /* ─── Reward-Rules handlers ─── */
+
+  async function saveRewardRule(rule: RewardRule, field: "xp_value" | "rule_value" | "is_active", value: number | boolean) {
+    setRewardSaving(rule.id);
+    try {
+      await fetch("/api/admin/reward-rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ruleId: rule.id,
+          ...(field === "xp_value" ? { ruleValue: value } : {}),
+          ...(field === "is_active" ? { isActive: value } : {}),
+        }),
+      });
+      setRewardRules((prev) =>
+        prev.map((r) => r.id === rule.id ? { ...r, [field]: value } : r)
+      );
+    } catch { /* silent */ }
+    setRewardSaving(null);
+  }
+
   /* ─── Leaderboard helpers ─── */
 
   function getLevelInfo(level: number) {
@@ -567,11 +686,13 @@ export function AdminDashboard() {
       )}
 
       {/* ── Tabs ── */}
-      <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl w-fit">
+      <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl w-fit flex-wrap">
         {([
-          { key: "studenten" as AdminTab, label: "Studenten", icon: "👥" },
-          { key: "leaderboard" as AdminTab, label: "Leaderboard", icon: "🏆" },
-        ] as { key: AdminTab; label: string; icon: string }[]).map((tab) => (
+          { key: "studenten" as AdminTab, label: "Studenten", icon: "👥", badge: null },
+          { key: "aktionen" as AdminTab, label: "Aktionen", icon: "⚡", badge: urgentCount > 0 ? urgentCount : null },
+          { key: "leaderboard" as AdminTab, label: "Leaderboard", icon: "🏆", badge: null },
+          { key: "rewards" as AdminTab, label: "XP-Regeln", icon: "🎯", badge: null },
+        ]).map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
@@ -583,9 +704,9 @@ export function AdminDashboard() {
           >
             <span>{tab.icon}</span>
             {tab.label}
-            {tab.key === "leaderboard" && leaderboard.length > 0 && (
-              <span className="ml-1 text-[10px] font-semibold bg-yellow-100 text-yellow-700 rounded-full px-1.5 py-0.5">
-                {leaderboard.length}
+            {tab.badge !== null && (
+              <span className="ml-1 text-[10px] font-bold bg-red-500 text-white rounded-full px-1.5 py-0.5 min-w-[16px] text-center">
+                {tab.badge}
               </span>
             )}
           </button>
@@ -740,6 +861,198 @@ export function AdminDashboard() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Aktions-Center Tab ── */}
+      {activeTab === "aktionen" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-semibold text-gray-800">Aktions-Center</h3>
+              <p className="text-xs text-gray-400">Wichtige Emails die eine Reaktion brauchen</p>
+            </div>
+            <button
+              onClick={fetchActionCenter}
+              className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+            >
+              Aktualisieren
+            </button>
+          </div>
+
+          {actionLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="w-7 h-7 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : actionItems.length === 0 ? (
+            <div className="text-center py-16 rounded-2xl border border-gray-100 bg-white">
+              <p className="text-4xl mb-3">✅</p>
+              <p className="text-sm font-medium text-gray-600">Alles erledigt!</p>
+              <p className="text-xs text-gray-400 mt-1">Keine ausstehenden Aktionen.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {actionItems.map((item) => {
+                const isUrgent = ["interview_invite", "offer"].includes(item.classification);
+                const isTaskCreated = item.action_status === "task_created";
+                const classLabel: Record<string, { label: string; color: string; bg: string }> = {
+                  interview_invite: { label: "🎯 Interview", color: "text-green-700", bg: "bg-green-50 border-green-200" },
+                  offer:            { label: "🎉 Zusage",    color: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200" },
+                  document_request: { label: "📄 Dokumente", color: "text-blue-700", bg: "bg-blue-50 border-blue-200" },
+                  followup_request: { label: "📩 Follow-up", color: "text-amber-700", bg: "bg-amber-50 border-amber-200" },
+                };
+                const cl = classLabel[item.classification] || { label: item.classification, color: "text-gray-600", bg: "bg-gray-50 border-gray-200" };
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`rounded-2xl border p-4 flex items-start gap-4 ${isUrgent ? "border-l-4 border-l-green-500 bg-green-50/30 border-gray-100" : "bg-white border-gray-100"}`}
+                  >
+                    <StudentAvatar name={item.studentName} fotoLink={item.fotoLink} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm text-gray-800">{item.studentName}</span>
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${cl.bg} ${cl.color}`}>
+                          {cl.label}
+                        </span>
+                        {isTaskCreated && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200">
+                            ✓ Aufgabe erstellt
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm font-medium text-gray-700 mt-1 truncate">{item.subject}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Von: {item.from_name || item.from_email}
+                        {item.company_name && ` · ${item.company_name}`}
+                        {" · "}
+                        {new Date(item.received_at).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                      {item.snippet && (
+                        <p className="text-xs text-gray-400 mt-1 line-clamp-2 italic">"{item.snippet}"</p>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2 shrink-0">
+                      {!isTaskCreated && (
+                        <button
+                          onClick={() => handleCreateTask(item)}
+                          className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
+                        >
+                          + Aufgabe
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleActionDone(item.id)}
+                        className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        Erledigt ✓
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Reward-Rules Tab ── */}
+      {activeTab === "rewards" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-semibold text-gray-800">XP-Regeln</h3>
+              <p className="text-xs text-gray-400">Punkte für Aktionen konfigurieren</p>
+            </div>
+            <button
+              onClick={fetchRewardRules}
+              className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+            >
+              Aktualisieren
+            </button>
+          </div>
+
+          {rewardLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="w-7 h-7 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 text-left text-xs text-gray-400 uppercase tracking-wider bg-gray-50/60">
+                    <th className="px-5 py-3 font-medium">Aktion</th>
+                    <th className="px-5 py-3 font-medium">Beschreibung</th>
+                    <th className="px-5 py-3 font-medium text-center">XP</th>
+                    <th className="px-5 py-3 font-medium text-center">Aktiv</th>
+                    <th className="px-5 py-3 font-medium text-center">Zuletzt geändert</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rewardRules.map((rule) => {
+                    const isSaving = rewardSaving === rule.id;
+                    const icons: Record<string, string> = {
+                      daily_login: "📅",
+                      email_sent: "📧",
+                      new_contact: "🏢",
+                      interview_invite: "🎯",
+                      offer_received: "🎉",
+                      streak_7: "🔥",
+                      streak_30: "💥",
+                      profile_complete: "✅",
+                    };
+                    return (
+                      <tr key={rule.id} className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors ${isSaving ? "opacity-60" : ""}`}>
+                        <td className="px-5 py-3">
+                          <span className="inline-flex items-center gap-2 font-mono text-xs bg-gray-100 px-2.5 py-1 rounded-lg text-gray-700">
+                            <span>{icons[rule.source_type] || "⭐"}</span>
+                            {rule.source_type}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-gray-600 text-xs max-w-[200px]">
+                          {rule.description || "—"}
+                        </td>
+                        <td className="px-5 py-3 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            max="1000"
+                            defaultValue={rule.xp_value}
+                            onBlur={(e) => {
+                              const val = parseInt(e.target.value);
+                              if (!isNaN(val) && val !== rule.xp_value) {
+                                saveRewardRule(rule, "xp_value", val);
+                              }
+                            }}
+                            className="w-16 text-center font-mono font-bold text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+                          />
+                          <span className="text-xs text-gray-400 ml-1">XP</span>
+                        </td>
+                        <td className="px-5 py-3 text-center">
+                          <Toggle
+                            on={rule.is_active}
+                            onChange={() => saveRewardRule(rule, "is_active", !rule.is_active)}
+                            colorOn="bg-green-500"
+                            size="sm"
+                          />
+                        </td>
+                        <td className="px-5 py-3 text-center text-xs text-gray-400">
+                          {new Date(rule.updated_at).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit" })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {rewardRules.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-5 py-12 text-center text-gray-400 text-sm">
+                        Keine Regeln gefunden. Bitte stelle sicher, dass die reward_rules Tabelle befüllt ist.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

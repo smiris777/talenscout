@@ -24,14 +24,19 @@ async function requireAdmin() {
 export async function updateAzubiStatus(id: number, status: string) {
   const admin = await requireAdmin();
 
-  const { error } = await admin
+  const { data, error } = await admin
     .from("ausbildung_main_engine")
     .update({ Aktiv: status })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id, \"Aktiv\"")
+    .single();
 
   if (error) throw new Error(error.message);
+  if (!data) throw new Error("Kein Datensatz gefunden (id=" + id + ")");
+
   revalidatePath("/admin");
   revalidatePath("/");
+  return data;
 }
 
 export async function toggleAzubiVisibility(id: number, sichtbar: boolean) {

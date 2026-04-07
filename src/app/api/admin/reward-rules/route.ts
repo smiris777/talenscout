@@ -4,6 +4,29 @@ import { createClient as createAdmin } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 
+async function getAdminClient(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const admin = createAdmin(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  const { data: profile } = await admin.from("user_profiles").select("role").eq("id", user.id).single();
+  if (profile?.role !== "administrator") return null;
+  return admin;
+}
+
+export async function GET() {
+  const supabase = await createClient();
+  const admin = await getAdminClient(supabase);
+  if (!admin) return NextResponse.json({ error: "Nicht autorisiert" }, { status: 403 });
+
+  const { data, error } = await admin
+    .from("reward_rules")
+    .select("*")
+    .order("source_type");
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ rules: data || [] });
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
