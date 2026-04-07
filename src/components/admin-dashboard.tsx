@@ -243,6 +243,12 @@ export function AdminDashboard() {
   const [creditDialog, setCreditDialog] = useState<{ azubi: AdminAzubi; mode: "einmalig" | "monatlich" | "sperren" } | null>(null);
   const [creditAmount, setCreditAmount] = useState("");
 
+  // Manual email send dialog
+  const [sendDialog, setSendDialog] = useState<AdminAzubi | null>(null);
+  const [sendCount, setSendCount] = useState<number>(1);
+  const [sendLoading, setSendLoading] = useState(false);
+  const [sendResult, setSendResult] = useState<{ sent: number; errors: number; message: string; log?: any[] } | null>(null);
+
   // SMTP
   const [smtpStatus, setSmtpStatus] = useState<Record<string, { status: "loading" | "connected" | "failed" | "no_credentials"; gmail?: string; error?: string }>>({});
 
@@ -508,6 +514,27 @@ export function AdminDashboard() {
       `Hallo ${(azubi.Namen || "").split(" ")[0]} 👋\n\nHier sind deine TalentScout Login-Daten:\n\n🔗 https://talent-scout-tau.vercel.app/login\n📧 E-Mail: ${loginEmail}\n🔑 Passwort: Test1234!\n\nBitte ändere dein Passwort nach dem ersten Login.\n\nBei Fragen einfach melden! 😊`
     );
     window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+  }
+
+  /* ─── Manual email send ─── */
+
+  async function handleSendManual() {
+    if (!sendDialog?.user_id) return;
+    setSendLoading(true);
+    setSendResult(null);
+    try {
+      const res = await fetch("/api/admin/send-emails-manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: sendDialog.user_id, count: sendCount }),
+      });
+      const data = await res.json();
+      setSendResult(data);
+      fetchData(); // refresh stats
+    } catch (e) {
+      setSendResult({ sent: 0, errors: 1, message: "Netzwerkfehler: " + (e as Error).message });
+    }
+    setSendLoading(false);
   }
 
   /* ─── Inline row actions ─── */
@@ -1152,15 +1179,29 @@ export function AdminDashboard() {
 
                     {/* Name - clickable */}
                     <td className="p-3">
-                      <button
-                        onClick={() => openEditModal(azubi)}
-                        className="text-left font-medium text-gray-800 hover:text-blue-600 transition-colors"
-                      >
-                        {(azubi.Namen || "Kein Name").trim()}
-                        <div className="text-[11px] text-gray-400 font-normal truncate max-w-[200px]">
-                          {azubi.Email || ""}
-                        </div>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openEditModal(azubi)}
+                          className="text-left font-medium text-gray-800 hover:text-blue-600 transition-colors"
+                        >
+                          {(azubi.Namen || "Kein Name").trim()}
+                          <div className="text-[11px] text-gray-400 font-normal truncate max-w-[160px]">
+                            {azubi.Email || ""}
+                          </div>
+                        </button>
+                        {/* Quick send button */}
+                        {azubi.user_id && azubi.gmail_app_password_set && (
+                          <button
+                            onClick={() => { setSendDialog(azubi); setSendCount(1); setSendResult(null); }}
+                            title="Emails manuell senden"
+                            className="shrink-0 w-6 h-6 flex items-center justify-center rounded-md bg-blue-50 hover:bg-blue-100 text-blue-500 hover:text-blue-700 transition-colors"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     </td>
 
                     {/* Ziel */}
@@ -1715,11 +1756,139 @@ export function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* ─── Manual Send Modal ─── */}
+      {sendDialog && (
+    <div
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
+      onClick={() => { if (!sendLoading) { setSendDialog(null); setSendResult(null); } }}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-100">
+          <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+            <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-gray-800">Emails manuell senden</h3>
+            <p className="text-sm text-gray-400">{sendDialog.Namen}</p>
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {/* Student info */}
+          <div className="flex gap-4 text-sm bg-gray-50 rounded-xl p-3">
+            <div>
+              <span className="text-gray-400 text-xs">Credits:</span>
+              <span className="ml-1 font-semibold text-gray-700">{sendDialog.monthly_credit ?? 0}</span>
+            </div>
+            <div>
+              <span className="text-gray-400 text-xs">Heute:</span>
+              <span className="ml-1 font-semibold text-gray-700">{sendDialog._sentToday}</span>
+            </div>
+            <div>
+              <span className="text-gray-400 text-xs">Gesamt:</span>
+              <span className="ml-1 font-semibold text-gray-700">{sendDialog._sentTotal}</span>
+            </div>
+          </div>
+
+          {/* Count selector */}
+          <div>
+            <p className="text-sm font-medium text-gray-600 mb-2">Wie viele Emails senden?</p>
+            <div className="flex gap-2">
+              {[1, 3, 5, 10, 20].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setSendCount(n)}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all border ${
+                    sendCount === n
+                      ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                      : "bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600"
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-1.5">
+              Wähle die Anzahl — max. {sendDialog.monthly_credit ?? 0} verbleibende Credits
+            </p>
+          </div>
+
+          {/* Result */}
+          {sendResult && (
+            <div className={`rounded-xl p-4 text-sm space-y-2 ${sendResult.errors > 0 && sendResult.sent === 0 ? "bg-red-50 border border-red-100" : "bg-green-50 border border-green-100"}`}>
+              <div className={`font-semibold ${sendResult.errors > 0 && sendResult.sent === 0 ? "text-red-700" : "text-green-700"}`}>
+                {sendResult.sent > 0 ? `✅ ${sendResult.sent} Email(s) erfolgreich gesendet` : ""}
+                {sendResult.errors > 0 ? ` ⚠️ ${sendResult.errors} Fehler` : ""}
+              </div>
+              <p className="text-gray-600">{sendResult.message}</p>
+              {sendResult.log && sendResult.log.length > 0 && (
+                <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                  {sendResult.log.map((item, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <span>{item.status === "sent" ? "✅" : "❌"}</span>
+                      <span className="font-medium truncate">{item.company}</span>
+                      <span className="text-gray-400 truncate">{item.email}</span>
+                      {item.error && <span className="text-red-500 truncate">{item.error}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end">
+          <button
+            onClick={() => { setSendDialog(null); setSendResult(null); }}
+            disabled={sendLoading}
+            className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            Schließen
+          </button>
+          {!sendResult && (
+            <button
+              onClick={handleSendManual}
+              disabled={sendLoading || !sendDialog.user_id}
+              className="px-5 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl disabled:opacity-50 transition-all shadow-sm flex items-center gap-2"
+            >
+              {sendLoading ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Sende...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                  {sendCount} Email{sendCount !== 1 ? "s" : ""} senden
+                </>
+              )}
+            </button>
+          )}
+          {sendResult && sendResult.sent > 0 && (
+            <button
+              onClick={() => { setSendResult(null); }}
+              className="px-5 py-2 text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all"
+            >
+              Nochmal senden
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+      )}
     </div>
   );
 }
-
-/* ─── Reusable form components ─── */
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
