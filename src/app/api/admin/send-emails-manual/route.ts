@@ -10,6 +10,15 @@ import { createCallTaskIfPhoneAvailable } from "@/lib/tasks/generator";
 import { getMatchingBereiche } from "@/lib/email/bereich-mapping";
 import { awardXP } from "@/lib/rewards/engine";
 
+function getDailyLimit(credCreatedAt: string): number {
+  const daysSinceSetup = Math.floor(
+    (Date.now() - new Date(credCreatedAt).getTime()) / 86400000
+  );
+  if (daysSinceSetup < 7) return 10;
+  if (daysSinceSetup < 14) return 15;
+  return 20;
+}
+
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
@@ -201,11 +210,25 @@ export async function POST(request: Request) {
     }
   }
 
+  const warmupLimit = getDailyLimit(creds.created_at);
+  const daysSinceSetup = Math.floor(
+    (Date.now() - new Date(creds.created_at).getTime()) / 86400000
+  );
+
   return NextResponse.json({
     sent: sentCount,
     errors: errorCount,
     total: targets.length,
     message: `${sentCount} E-Mail(s) gesendet, ${errorCount} Fehler`,
+    warmup: {
+      daysSinceSetup,
+      currentDailyLimit: warmupLimit,
+      info: daysSinceSetup < 7
+        ? `Woche 1 — Limit: ${warmupLimit}/Tag`
+        : daysSinceSetup < 14
+        ? `Woche 2 — Limit: ${warmupLimit}/Tag`
+        : `Woche 3+ — Limit: ${warmupLimit}/Tag`,
+    },
     log,
   });
 }

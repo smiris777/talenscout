@@ -11,8 +11,17 @@ import { awardXP } from "@/lib/rewards/engine";
 
 export const runtime = "nodejs";
 
-const MAX_DAILY_EMAILS = 12;
 const DELAY_BETWEEN_SENDS_MS = 1500;
+
+/** Warm-up schedule based on days since Gmail was set up */
+function getDailyLimit(credCreatedAt: string): number {
+  const daysSinceSetup = Math.floor(
+    (Date.now() - new Date(credCreatedAt).getTime()) / 86400000
+  );
+  if (daysSinceSetup < 7) return 10;   // Week 1
+  if (daysSinceSetup < 14) return 15;  // Week 2
+  return 20;                            // Week 3+
+}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -76,7 +85,19 @@ export async function GET(request: Request) {
       const remaining = student.monthly_credit - (monthlyUsed || 0);
       if (remaining <= 0) continue;
 
-      // 3. Check daily limit
+      // 3. Get email credentials (needed for warm-up start date)
+      const { data: creds } = await supabase
+        .from("email_credentials")
+        .select("*")
+        .eq("user_id", student.user_id)
+        .eq("is_active", true)
+        .single();
+
+      if (!creds) continue;
+
+      // 4. Check daily limit (warm-up schedule based on creds age)
+      const maxDailyEmails = getDailyLimit(creds.created_at);
+
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
@@ -87,20 +108,10 @@ export async function GET(request: Request) {
         .eq("status", "sent")
         .gte("sent_at", today.toISOString());
 
-      const dailyRemaining = MAX_DAILY_EMAILS - (todayUsed || 0);
+      const dailyRemaining = maxDailyEmails - (todayUsed || 0);
       if (dailyRemaining <= 0) continue;
 
       const toSend = Math.min(remaining, dailyRemaining);
-
-      // 4. Get email credentials
-      const { data: creds } = await supabase
-        .from("email_credentials")
-        .select("*")
-        .eq("user_id", student.user_id)
-        .eq("is_active", true)
-        .single();
-
-      if (!creds) continue;
 
       const appPassword = decryptPassword(creds.encrypted_password);
 
