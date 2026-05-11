@@ -260,6 +260,22 @@ export function AdminDashboard() {
   // SMTP
   const [smtpStatus, setSmtpStatus] = useState<Record<string, { status: "loading" | "connected" | "failed" | "no_credentials"; gmail?: string; error?: string }>>({});
 
+  // Arbeitsagentur-Scraping
+  const [scrapeOpen, setScrapeOpen] = useState(false);
+  const [scrapeWas, setScrapeWas] = useState("");
+  const [scrapeWo, setScrapeWo] = useState("");
+  const [scrapeUmkreis, setScrapeUmkreis] = useState<number>(0);
+  const [scrapeMax, setScrapeMax] = useState<number>(25);
+  const [scrapeLoading, setScrapeLoading] = useState(false);
+  const [scrapeResult, setScrapeResult] = useState<{
+    mode?: string;
+    durationMs?: number;
+    stats?: { inserted: number; noEmail: number; duplicateInPool: number; alreadyLogged: number; errors: number };
+    total?: { inserted: number; noEmail: number; duplicateInPool: number; alreadyLogged: number; errors: number };
+    perSearch?: Array<{ was: string; inserted: number; noEmail: number; duplicates: number; alreadyLogged: number; errors: number }>;
+    error?: string;
+  } | null>(null);
+
   // Edit / Create modal
   const [editModal, setEditModal] = useState<{ mode: "create" | "edit"; engineId?: number; userId?: string } | null>(null);
   const [form, setForm] = useState<StudentFormData>(emptyForm);
@@ -722,6 +738,43 @@ export function AdminDashboard() {
     return <span className="text-sm font-bold text-gray-400 w-8 text-center">#{rank}</span>;
   }
 
+  /* ─── Arbeitsagentur-Scrape ─── */
+
+  async function handleScrape(mode: "single" | "batch") {
+    setScrapeLoading(true);
+    setScrapeResult(null);
+    try {
+      const body: Record<string, unknown> = {
+        size: 25,
+        pages: 1,
+        maxInserts: scrapeMax || 25,
+      };
+      if (mode === "single") {
+        if (!scrapeWas.trim()) {
+          setScrapeResult({ error: "Bitte einen Beruf eingeben." });
+          setScrapeLoading(false);
+          return;
+        }
+        body.was = scrapeWas.trim();
+        if (scrapeWo.trim()) body.wo = scrapeWo.trim();
+        if (scrapeUmkreis > 0) body.umkreis = scrapeUmkreis;
+      } else if (scrapeWo.trim()) {
+        body.wo = scrapeWo.trim();
+        if (scrapeUmkreis > 0) body.umkreis = scrapeUmkreis;
+      }
+      const res = await fetch("/api/admin/scrape-arbeitsagentur", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      setScrapeResult(data);
+    } catch (e) {
+      setScrapeResult({ error: (e as Error).message });
+    }
+    setScrapeLoading(false);
+  }
+
   /* ─── Render ─── */
 
   return (
@@ -738,6 +791,131 @@ export function AdminDashboard() {
           <StatCard label="Interviews" value={stats.interviews} color="text-rose-600" />
         </div>
       )}
+
+      {/* ── Arbeitsagentur-Scraper ── */}
+      <div className="rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <button
+          type="button"
+          onClick={() => setScrapeOpen((v) => !v)}
+          className="w-full flex items-center justify-between p-4 hover:bg-gray-50 rounded-2xl transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🔎</span>
+            <div className="text-left">
+              <div className="text-sm font-semibold text-gray-800">
+                Bewerbungs-Pool füllen (Agentur für Arbeit)
+              </div>
+              <div className="text-xs text-gray-400">
+                Sucht offene Stellen und fügt sie automatisch in den Pool ein
+              </div>
+            </div>
+          </div>
+          <span className="text-gray-400 text-sm">{scrapeOpen ? "▲" : "▼"}</span>
+        </button>
+
+        {scrapeOpen && (
+          <div className="p-4 border-t border-gray-100 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1">Beruf (leer = alle Studenten-Ziele)</label>
+                <Input
+                  value={scrapeWas}
+                  onChange={(e) => setScrapeWas(e.target.value)}
+                  placeholder="z. B. Pflegefachmann"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1">Ort (optional)</label>
+                <Input
+                  value={scrapeWo}
+                  onChange={(e) => setScrapeWo(e.target.value)}
+                  placeholder="z. B. Berlin"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1">Umkreis (km)</label>
+                <Input
+                  type="number"
+                  value={scrapeUmkreis || ""}
+                  onChange={(e) => setScrapeUmkreis(parseInt(e.target.value) || 0)}
+                  placeholder="0 = ohne"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1">Max. neue Einträge</label>
+                <Input
+                  type="number"
+                  value={scrapeMax}
+                  onChange={(e) => setScrapeMax(parseInt(e.target.value) || 25)}
+                  placeholder="25"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleScrape("single")}
+                disabled={scrapeLoading || !scrapeWas.trim()}
+                className="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-lg transition-colors"
+              >
+                {scrapeLoading ? "Suche läuft…" : "Diesen Beruf suchen"}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleScrape("batch")}
+                disabled={scrapeLoading}
+                className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white rounded-lg transition-colors"
+              >
+                {scrapeLoading ? "Suche läuft…" : "Für alle Studenten-Ziele suchen"}
+              </button>
+              <span className="text-xs text-gray-400 ml-2">
+                Läuft auch nachts automatisch um 03:00 Uhr.
+              </span>
+            </div>
+
+            {scrapeResult && (
+              <div className="mt-2 rounded-xl bg-gray-50 border border-gray-100 p-3 text-xs text-gray-700">
+                {scrapeResult.error ? (
+                  <div className="text-red-600">Fehler: {scrapeResult.error}</div>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 font-medium">
+                      <span>✅ Neu im Pool: <span className="text-emerald-600 font-semibold">{scrapeResult.stats?.inserted ?? scrapeResult.total?.inserted ?? 0}</span></span>
+                      <span>✉️ Ohne E-Mail: {scrapeResult.stats?.noEmail ?? scrapeResult.total?.noEmail ?? 0}</span>
+                      <span>♻️ Duplikate: {scrapeResult.stats?.duplicateInPool ?? scrapeResult.total?.duplicateInPool ?? 0}</span>
+                      <span>📋 Schon gesehen: {scrapeResult.stats?.alreadyLogged ?? scrapeResult.total?.alreadyLogged ?? 0}</span>
+                      {(scrapeResult.stats?.errors ?? scrapeResult.total?.errors ?? 0) > 0 && (
+                        <span className="text-red-600">⚠️ Fehler: {scrapeResult.stats?.errors ?? scrapeResult.total?.errors}</span>
+                      )}
+                      {scrapeResult.durationMs && (
+                        <span className="text-gray-400">⏱ {(scrapeResult.durationMs / 1000).toFixed(1)}s</span>
+                      )}
+                    </div>
+                    {scrapeResult.perSearch && scrapeResult.perSearch.length > 0 && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-gray-500 hover:text-gray-700">
+                          Details ({scrapeResult.perSearch.length} Berufe)
+                        </summary>
+                        <ul className="mt-2 space-y-1">
+                          {scrapeResult.perSearch.map((p) => (
+                            <li key={p.was} className="flex justify-between">
+                              <span className="text-gray-700">{p.was}</span>
+                              <span className="text-gray-500">
+                                +{p.inserted} neu · {p.noEmail} o.Mail · {p.duplicates} Dup
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* ── Tabs ── */}
       <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl w-fit flex-wrap">

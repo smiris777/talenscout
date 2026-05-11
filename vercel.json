@@ -13,10 +13,17 @@
     {
       "path": "/api/cron/reset-credits",
       "schedule": "0 0 1 * *"
+    },
+    {
+      "path": "/api/cron/scrape-arbeitsagentur",
+      "schedule": "0 3 * * *"
     }
   ],
   "functions": {
     "src/app/api/cron/send-emails/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/scrape-arbeitsagentur/route.ts": {
       "maxDuration": 300
     }
   }
