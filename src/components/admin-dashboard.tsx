@@ -260,6 +260,18 @@ export function AdminDashboard() {
   // SMTP
   const [smtpStatus, setSmtpStatus] = useState<Record<string, { status: "loading" | "connected" | "failed" | "no_credentials"; gmail?: string; error?: string }>>({});
 
+  // Email-Diagnose
+  const [diagOpen, setDiagOpen] = useState(false);
+  const [diagLoading, setDiagLoading] = useState(false);
+  const [diagResult, setDiagResult] = useState<{
+    environment?: { cronSecretSet: boolean; supabaseUrlSet: boolean; serviceKeySet: boolean; anthropicKeySet: boolean };
+    summary?: { totalStudents: number; readyToSend: number; blocked: number; poolSize: number };
+    topBlockers?: Array<{ reason: string; count: number }>;
+    recentFailures?: Array<{ company: string; email: string; error: string; at: string }>;
+    students?: Array<{ id: number; name: string | null; ziel: string | null; ready: boolean; blockers: string[]; poolMatches: number; bereicheSuchbegriffe: string[]; monatlichGesendet: number; heuteGesendet: number; monthlyCredit: number }>;
+    error?: string;
+  } | null>(null);
+
   // Arbeitsagentur-Scraping
   const [scrapeOpen, setScrapeOpen] = useState(false);
   const [scrapeWas, setScrapeWas] = useState("");
@@ -738,6 +750,21 @@ export function AdminDashboard() {
     return <span className="text-sm font-bold text-gray-400 w-8 text-center">#{rank}</span>;
   }
 
+  /* ─── Email-Diagnose ─── */
+
+  async function handleDiagnose() {
+    setDiagLoading(true);
+    setDiagResult(null);
+    try {
+      const res = await fetch("/api/admin/email-diagnose");
+      const data = await res.json();
+      setDiagResult(data);
+    } catch (e) {
+      setDiagResult({ error: (e as Error).message });
+    }
+    setDiagLoading(false);
+  }
+
   /* ─── Arbeitsagentur-Scrape ─── */
 
   async function handleScrape(mode: "single" | "batch") {
@@ -791,6 +818,173 @@ export function AdminDashboard() {
           <StatCard label="Interviews" value={stats.interviews} color="text-rose-600" />
         </div>
       )}
+
+      {/* ── Email-Diagnose ── */}
+      <div className="rounded-2xl border border-amber-200 bg-amber-50/40 shadow-sm">
+        <button
+          type="button"
+          onClick={() => {
+            setDiagOpen((v) => !v);
+            if (!diagResult) handleDiagnose();
+          }}
+          className="w-full flex items-center justify-between p-4 hover:bg-amber-50 rounded-2xl transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🩺</span>
+            <div className="text-left">
+              <div className="text-sm font-semibold text-gray-800">
+                Email-Versand Diagnose
+              </div>
+              <div className="text-xs text-gray-500">
+                Warum gehen keine Emails raus? Hier sehen.
+              </div>
+            </div>
+          </div>
+          <span className="text-gray-400 text-sm">{diagOpen ? "▲" : "▼"}</span>
+        </button>
+
+        {diagOpen && (
+          <div className="p-4 border-t border-amber-200 space-y-3">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleDiagnose}
+                disabled={diagLoading}
+                className="px-4 py-2 text-sm font-medium bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 text-white rounded-lg transition-colors"
+              >
+                {diagLoading ? "Prüfe…" : "Erneut prüfen"}
+              </button>
+            </div>
+
+            {diagResult?.error && (
+              <div className="text-red-600 text-sm">Fehler: {diagResult.error}</div>
+            )}
+
+            {diagResult?.summary && (
+              <>
+                {/* Übersicht */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                  <div className="bg-white rounded-lg p-3 border border-gray-100">
+                    <div className="text-gray-400">Studenten gesamt</div>
+                    <div className="text-2xl font-bold text-gray-800">{diagResult.summary.totalStudents}</div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-gray-100">
+                    <div className="text-gray-400">Bereit zu senden</div>
+                    <div className="text-2xl font-bold text-emerald-600">{diagResult.summary.readyToSend}</div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-gray-100">
+                    <div className="text-gray-400">Blockiert</div>
+                    <div className="text-2xl font-bold text-red-600">{diagResult.summary.blocked}</div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border border-gray-100">
+                    <div className="text-gray-400">Firmen-Pool</div>
+                    <div className="text-2xl font-bold text-indigo-600">{diagResult.summary.poolSize}</div>
+                  </div>
+                </div>
+
+                {/* Environment */}
+                {diagResult.environment && (
+                  <div className="bg-white rounded-lg p-3 border border-gray-100 text-xs">
+                    <div className="font-semibold text-gray-700 mb-1">Server-Konfiguration</div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      <span className={diagResult.environment.cronSecretSet ? "text-emerald-600" : "text-red-600 font-semibold"}>
+                        {diagResult.environment.cronSecretSet ? "✓" : "✗"} CRON_SECRET
+                      </span>
+                      <span className={diagResult.environment.supabaseUrlSet ? "text-emerald-600" : "text-red-600 font-semibold"}>
+                        {diagResult.environment.supabaseUrlSet ? "✓" : "✗"} SUPABASE_URL
+                      </span>
+                      <span className={diagResult.environment.serviceKeySet ? "text-emerald-600" : "text-red-600 font-semibold"}>
+                        {diagResult.environment.serviceKeySet ? "✓" : "✗"} SERVICE_ROLE_KEY
+                      </span>
+                      <span className={diagResult.environment.anthropicKeySet ? "text-emerald-600" : "text-amber-600"}>
+                        {diagResult.environment.anthropicKeySet ? "✓" : "?"} ANTHROPIC_API_KEY
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Top Blocker */}
+                {diagResult.topBlockers && diagResult.topBlockers.length > 0 && (
+                  <div className="bg-white rounded-lg p-3 border border-gray-100 text-xs">
+                    <div className="font-semibold text-gray-700 mb-2">Häufigste Ursachen</div>
+                    <ul className="space-y-1">
+                      {diagResult.topBlockers.map((b) => (
+                        <li key={b.reason} className="flex justify-between">
+                          <span className="text-gray-700">{b.reason}</span>
+                          <span className="font-semibold text-red-600">{b.count}×</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Recent Failures */}
+                {diagResult.recentFailures && diagResult.recentFailures.length > 0 && (
+                  <details className="bg-white rounded-lg p-3 border border-gray-100 text-xs">
+                    <summary className="font-semibold text-gray-700 cursor-pointer">
+                      Fehlgeschlagene Versuche (letzte 24h, {diagResult.recentFailures.length})
+                    </summary>
+                    <ul className="mt-2 space-y-1">
+                      {diagResult.recentFailures.map((f, i) => (
+                        <li key={i} className="border-b border-gray-50 pb-1">
+                          <div className="text-gray-700">{f.company || "?"} → {f.email}</div>
+                          <div className="text-red-600 truncate">{f.error}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+
+                {/* Pro Student */}
+                {diagResult.students && (
+                  <details className="bg-white rounded-lg p-3 border border-gray-100 text-xs">
+                    <summary className="font-semibold text-gray-700 cursor-pointer">
+                      Status pro Student ({diagResult.students.length})
+                    </summary>
+                    <div className="mt-2 max-h-96 overflow-y-auto">
+                      <table className="w-full text-xs">
+                        <thead className="text-gray-400 sticky top-0 bg-white">
+                          <tr>
+                            <th className="text-left py-1">Student</th>
+                            <th className="text-left py-1">Status</th>
+                            <th className="text-right py-1">Pool</th>
+                            <th className="text-right py-1">Heute</th>
+                            <th className="text-right py-1">Monat</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {diagResult.students.map((s) => (
+                            <tr key={s.id} className="border-t border-gray-50">
+                              <td className="py-1">
+                                <div className="font-medium text-gray-700">{s.name || "(ohne Name)"}</div>
+                                <div className="text-gray-400 truncate max-w-xs">{s.ziel}</div>
+                              </td>
+                              <td className="py-1">
+                                {s.ready ? (
+                                  <span className="text-emerald-600 font-semibold">✓ bereit</span>
+                                ) : (
+                                  <div className="text-red-600">
+                                    {s.blockers.map((b, i) => (
+                                      <div key={i}>· {b}</div>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="text-right py-1 text-gray-600">{s.poolMatches}</td>
+                              <td className="text-right py-1 text-gray-600">{s.heuteGesendet}</td>
+                              <td className="text-right py-1 text-gray-600">{s.monatlichGesendet}/{s.monthlyCredit}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* ── Arbeitsagentur-Scraper ── */}
       <div className="rounded-2xl border border-gray-100 bg-white shadow-sm">
