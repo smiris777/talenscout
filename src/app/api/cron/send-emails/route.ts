@@ -55,15 +55,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ message: "No active students", results: [] });
   }
 
-  // Round-robin per hour: each run processes the student whose turn it is
-  const now = new Date();
-  const hourSlot = now.getUTCHours(); // 7–16
-  const dayOfYear = Math.floor((Date.now() - new Date(now.getUTCFullYear(), 0, 0).getTime()) / 86400000);
-  // Unique slot per run: combine day offset + hour offset
-  const slotIndex = (dayOfYear * 10 + (hourSlot - 7)) % students.length;
-  const rotated = [...students.slice(slotIndex), ...students.slice(0, slotIndex)];
-
-  for (const student of rotated) {
+  for (const student of students) {
     if (!student.user_id) continue;
 
     let sentCount = 0;
@@ -111,7 +103,9 @@ export async function GET(request: Request) {
       const dailyRemaining = maxDailyEmails - (todayUsed || 0);
       if (dailyRemaining <= 0) continue;
 
-      const toSend = Math.min(remaining, dailyRemaining);
+      // Spread sends evenly across 10 daily runs (7–16 UTC) to stay within timeout
+      const maxPerRun = Math.ceil(maxDailyEmails / 10);
+      const toSend = Math.min(remaining, dailyRemaining, maxPerRun);
 
       const appPassword = decryptPassword(creds.encrypted_password);
 
