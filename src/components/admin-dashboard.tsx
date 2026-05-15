@@ -111,6 +111,17 @@ interface InboxEmail {
   is_read: boolean;
 }
 
+interface ScrapeStatus {
+  activeTerms: string[];
+  lastRunAt: string | null;
+  isLikelyRunning: boolean;
+  todayInserted: number;
+  weekInserted: number;
+  nextRunsUTC: string[];
+  lastRunStats: Array<{ bereich: string; inserted: number; skipped: number }>;
+  recentActivityCount: number;
+}
+
 interface AnalyticsData {
   pipeline: Array<{ label: string; value: number; rate?: number; color: string }>;
   classificationCounts: Record<string, number>;
@@ -305,6 +316,16 @@ export function AdminDashboard() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
+  // Scraping live status (always loaded)
+  const [scrapeStatus, setScrapeStatus] = useState<ScrapeStatus | null>(null);
+  const [scrapeStatusLoading, setScrapeStatusLoading] = useState(false);
+
+  // Stelle manuell hinzufügen
+  const [addStelleOpen, setAddStelleOpen] = useState(false);
+  const [addStelleForm, setAddStelleForm] = useState({ firmenname: "", email: "", bereich: "", name: "", geschlecht: "", telefonnummer: "", notizen: "" });
+  const [addStelleLoading, setAddStelleLoading] = useState(false);
+  const [addStelleMsg, setAddStelleMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
   // Posteingang aller Studenten
   const [inboxEmails, setInboxEmails] = useState<InboxEmail[]>([]);
   const [inboxLoading, setInboxLoading] = useState(false);
@@ -413,6 +434,42 @@ export function AdminDashboard() {
   useEffect(() => {
     if (activeTab === "uebersicht" && !analytics) fetchAnalytics();
   }, [activeTab, analytics, fetchAnalytics]);
+
+  const fetchScrapeStatus = useCallback(async () => {
+    setScrapeStatusLoading(true);
+    try {
+      const res = await fetch("/api/admin/scrape-status");
+      const data = await res.json();
+      setScrapeStatus(data);
+    } catch { /* silent */ }
+    setScrapeStatusLoading(false);
+  }, []);
+
+  // Load scrape status once on mount
+  useEffect(() => { fetchScrapeStatus(); }, [fetchScrapeStatus]);
+
+  async function handleAddStelle() {
+    setAddStelleLoading(true);
+    setAddStelleMsg(null);
+    try {
+      const res = await fetch("/api/admin/add-stelle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(addStelleForm),
+      });
+      const data = await res.json();
+      if (data.error) {
+        setAddStelleMsg({ type: "err", text: data.error });
+      } else {
+        setAddStelleMsg({ type: "ok", text: "Stelle erfolgreich hinzugefügt!" });
+        setAddStelleForm({ firmenname: "", email: "", bereich: "", name: "", geschlecht: "", telefonnummer: "", notizen: "" });
+        fetchScrapeStatus();
+      }
+    } catch {
+      setAddStelleMsg({ type: "err", text: "Netzwerkfehler" });
+    }
+    setAddStelleLoading(false);
+  }
 
   const fetchInbox = useCallback(async () => {
     setInboxLoading(true);
@@ -899,6 +956,149 @@ export function AdminDashboard() {
           <StatCard label="Gesamt gesendet" value={stats.emailsSentTotal} color="text-indigo-600" />
           <StatCard label="Antwortrate" value={stats.responseRate + "%"} color="text-amber-600" />
           <StatCard label="Interviews" value={stats.interviews} color="text-rose-600" />
+        </div>
+      )}
+
+      {/* ── Scraping Live-Status (immer sichtbar) ── */}
+      <div className={`rounded-2xl border shadow-sm transition-colors ${scrapeStatus?.isLikelyRunning ? "border-teal-300 bg-teal-50/60" : "border-gray-100 bg-white"}`}>
+        <div className="flex items-center justify-between px-5 py-3 gap-3 flex-wrap">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-lg shrink-0">🔎</span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-semibold text-gray-800">Scraping-Status</span>
+                {scrapeStatus?.isLikelyRunning ? (
+                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-teal-700 bg-teal-100 border border-teal-200 rounded-full px-2 py-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse inline-block" />
+                    Läuft gerade
+                  </span>
+                ) : scrapeStatus?.lastRunAt ? (
+                  <span className="text-[11px] text-gray-400">
+                    Zuletzt: {new Date(scrapeStatus.lastRunAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                ) : null}
+                {!scrapeStatus?.isLikelyRunning && scrapeStatus?.nextRunsUTC[0] && (
+                  <span className="text-[11px] text-gray-400">
+                    · Nächster Lauf: {new Date(scrapeStatus.nextRunsUTC[0]).toLocaleString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr
+                  </span>
+                )}
+              </div>
+              {/* Active search terms */}
+              {scrapeStatus && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {scrapeStatus.activeTerms.slice(0, 12).map((term) => {
+                    const stat = scrapeStatus.lastRunStats.find((s) => s.bereich?.toLowerCase().includes(term.toLowerCase()) || term.toLowerCase().includes(s.bereich?.toLowerCase() ?? ""));
+                    return (
+                      <span
+                        key={term}
+                        className={`text-[11px] px-2 py-0.5 rounded-full border font-medium ${scrapeStatus.isLikelyRunning ? "bg-teal-100 text-teal-700 border-teal-200" : "bg-gray-100 text-gray-600 border-gray-200"}`}
+                        title={stat ? `+${stat.inserted} heute` : ""}
+                      >
+                        {term}{stat && stat.inserted > 0 ? ` +${stat.inserted}` : ""}
+                      </span>
+                    );
+                  })}
+                  {(scrapeStatus.activeTerms.length > 12) && (
+                    <span className="text-[11px] text-gray-400 self-center">+{scrapeStatus.activeTerms.length - 12} weitere</span>
+                  )}
+                  {scrapeStatus.activeTerms.length === 0 && (
+                    <span className="text-[11px] text-amber-600">Keine aktiven Studenten-Ziele — Scraping inaktiv</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="text-right">
+              <p className="text-xs font-semibold text-gray-700">{scrapeStatus?.todayInserted ?? "—"} <span className="font-normal text-gray-400">heute</span></p>
+              <p className="text-[11px] text-gray-400">{scrapeStatus?.weekInserted ?? "—"} diese Woche im Pool</p>
+            </div>
+            <button
+              onClick={() => setAddStelleOpen(true)}
+              className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm whitespace-nowrap"
+            >
+              + Stelle hinzufügen
+            </button>
+            <button
+              onClick={fetchScrapeStatus}
+              disabled={scrapeStatusLoading}
+              className="px-2.5 py-1.5 text-xs bg-white border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              {scrapeStatusLoading ? "…" : "↻"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Stelle manuell hinzufügen Modal ── */}
+      {addStelleOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-lg p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-gray-800">Stelle manuell hinzufügen</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Direkt in den Bewerbungs-Pool einfügen</p>
+              </div>
+              <button onClick={() => { setAddStelleOpen(false); setAddStelleMsg(null); }} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-gray-500 block mb-1">Firmenname *</label>
+                <Input value={addStelleForm.firmenname} onChange={(e) => setAddStelleForm((f) => ({ ...f, firmenname: e.target.value }))} placeholder="z. B. Physiozentrum Berlin GmbH" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-gray-500 block mb-1">E-Mail Adresse *</label>
+                <Input type="email" value={addStelleForm.email} onChange={(e) => setAddStelleForm((f) => ({ ...f, email: e.target.value }))} placeholder="bewerbung@firma.de" />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-gray-500 block mb-1">Bereich / Beruf *</label>
+                <Input value={addStelleForm.bereich} onChange={(e) => setAddStelleForm((f) => ({ ...f, bereich: e.target.value }))} placeholder="z. B. Physiotherapeut" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1">Ansprechpartner</label>
+                <Input value={addStelleForm.name} onChange={(e) => setAddStelleForm((f) => ({ ...f, name: e.target.value }))} placeholder="z. B. Müller" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1">Geschlecht</label>
+                <select
+                  value={addStelleForm.geschlecht}
+                  onChange={(e) => setAddStelleForm((f) => ({ ...f, geschlecht: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                >
+                  <option value="">Unbekannt</option>
+                  <option value="Herr">Herr</option>
+                  <option value="Frau">Frau</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1">Telefon</label>
+                <Input value={addStelleForm.telefonnummer} onChange={(e) => setAddStelleForm((f) => ({ ...f, telefonnummer: e.target.value }))} placeholder="+49 30 ..." />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1">Notizen</label>
+                <Input value={addStelleForm.notizen} onChange={(e) => setAddStelleForm((f) => ({ ...f, notizen: e.target.value }))} placeholder="optional" />
+              </div>
+            </div>
+
+            {addStelleMsg && (
+              <div className={`text-xs rounded-lg px-3 py-2 ${addStelleMsg.type === "ok" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+                {addStelleMsg.text}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button onClick={() => { setAddStelleOpen(false); setAddStelleMsg(null); }} className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">Abbrechen</button>
+              <button
+                onClick={handleAddStelle}
+                disabled={addStelleLoading || !addStelleForm.firmenname.trim() || !addStelleForm.email.trim() || !addStelleForm.bereich.trim()}
+                className="px-4 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {addStelleLoading ? "Wird gespeichert…" : "Zur Pool hinzufügen"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1727,7 +1927,12 @@ export function AdminDashboard() {
 
               {/* ── Scraping Aktivität ── */}
               <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-5">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Scraping Aktivität — letzte 14 Tage</p>
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Scraping Aktivität — letzte 14 Tage</p>
+                  <button onClick={() => setAddStelleOpen(true)} className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    + Stelle hinzufügen
+                  </button>
+                </div>
                 {(() => {
                   const entries = Object.entries(analytics.scrapingTimeSeries);
                   const maxVal = Math.max(1, ...entries.map(([, v]) => v));
@@ -1753,6 +1958,19 @@ export function AdminDashboard() {
                     </div>
                   );
                 })()}
+                {/* Per-term last 24h stats from scrapeStatus */}
+                {scrapeStatus && scrapeStatus.lastRunStats.length > 0 && (
+                  <div className="mt-4 border-t border-gray-50 pt-3">
+                    <p className="text-[11px] text-gray-400 mb-2">Letzte 24h pro Beruf:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {scrapeStatus.lastRunStats.map((s) => (
+                        <span key={s.bereich} className="text-[11px] px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-100">
+                          {s.bereich}: <strong>+{s.inserted}</strong>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* ── Kandidaten Pipeline ── */}
