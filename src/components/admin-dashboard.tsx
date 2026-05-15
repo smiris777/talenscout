@@ -96,7 +96,7 @@ const STATUS_OPTIONS = [
 
 type SortKey = "name" | "credits" | "emailsTotal" | "emailsToday" | "scans" | "lastLogin";
 type SortDir = "asc" | "desc";
-type AdminTab = "studenten" | "leaderboard" | "aktionen" | "rewards" | "posteingang";
+type AdminTab = "uebersicht" | "studenten" | "leaderboard" | "aktionen" | "rewards" | "posteingang";
 
 interface InboxEmail {
   id: string;
@@ -109,6 +109,22 @@ interface InboxEmail {
   body_text: string | null;
   received_at: string;
   is_read: boolean;
+}
+
+interface AnalyticsData {
+  pipeline: Array<{ label: string; value: number; rate?: number; color: string }>;
+  classificationCounts: Record<string, number>;
+  emailsSentTimeSeries: Record<string, number>;
+  emailsReceivedTimeSeries: Record<string, number>;
+  scrapingTimeSeries: Record<string, number>;
+  studentPipeline: Array<{
+    userId: string; name: string; ziel: string; aktiv: string;
+    fotoLink: string | null; gmailSet: boolean; studentActive: boolean;
+    sent: number; received: number; interviews: number;
+  }>;
+  totalPool: number;
+  totalSent: number;
+  totalReceived: number;
 }
 
 interface ActionItem {
@@ -285,6 +301,10 @@ export function AdminDashboard() {
     error?: string;
   } | null>(null);
 
+  // Analytics / Übersicht
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
   // Posteingang aller Studenten
   const [inboxEmails, setInboxEmails] = useState<InboxEmail[]>([]);
   const [inboxLoading, setInboxLoading] = useState(false);
@@ -379,6 +399,20 @@ export function AdminDashboard() {
   useEffect(() => {
     if (activeTab === "rewards" && rewardRules.length === 0) fetchRewardRules();
   }, [activeTab, rewardRules.length, fetchRewardRules]);
+
+  const fetchAnalytics = useCallback(async () => {
+    setAnalyticsLoading(true);
+    try {
+      const res = await fetch("/api/admin/analytics");
+      const data = await res.json();
+      setAnalytics(data);
+    } catch { /* silent */ }
+    setAnalyticsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "uebersicht" && !analytics) fetchAnalytics();
+  }, [activeTab, analytics, fetchAnalytics]);
 
   const fetchInbox = useCallback(async () => {
     setInboxLoading(true);
@@ -1163,6 +1197,7 @@ export function AdminDashboard() {
       {/* ── Tabs ── */}
       <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl w-fit flex-wrap">
         {([
+          { key: "uebersicht" as AdminTab, label: "Übersicht", icon: "📊", badge: null },
           { key: "studenten" as AdminTab, label: "Studenten", icon: "👥", badge: null },
           { key: "aktionen" as AdminTab, label: "Aktionen", icon: "⚡", badge: urgentCount > 0 ? urgentCount : null },
           { key: "leaderboard" as AdminTab, label: "Leaderboard", icon: "🏆", badge: null },
@@ -1530,6 +1565,261 @@ export function AdminDashboard() {
                 </tbody>
               </table>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Übersicht / Analytics Tab ── */}
+      {activeTab === "uebersicht" && (
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-semibold text-gray-800">Analytics Übersicht</h3>
+              <p className="text-xs text-gray-400">Echtzeit-Einblick in alle Prozesse</p>
+            </div>
+            <button
+              onClick={fetchAnalytics}
+              disabled={analyticsLoading}
+              className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+            >
+              {analyticsLoading ? "Lädt…" : "Aktualisieren"}
+            </button>
+          </div>
+
+          {analyticsLoading || !analytics ? (
+            <div className="flex items-center justify-center py-24">
+              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            <>
+              {/* ── Pipeline Funnel ── */}
+              <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-6">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-5">Bewerbungs-Pipeline</p>
+                <div className="flex items-stretch gap-0">
+                  {analytics.pipeline.map((stage, i) => {
+                    const colors: Record<string, { bg: string; text: string; bar: string; arrow: string }> = {
+                      blue:    { bg: "bg-blue-50",    text: "text-blue-700",    bar: "bg-blue-500",    arrow: "text-blue-200" },
+                      indigo:  { bg: "bg-indigo-50",  text: "text-indigo-700",  bar: "bg-indigo-500",  arrow: "text-indigo-200" },
+                      violet:  { bg: "bg-violet-50",  text: "text-violet-700",  bar: "bg-violet-500",  arrow: "text-violet-200" },
+                      emerald: { bg: "bg-emerald-50", text: "text-emerald-700", bar: "bg-emerald-500", arrow: "text-emerald-200" },
+                    };
+                    const c = colors[stage.color] || colors.blue;
+                    return (
+                      <React.Fragment key={stage.label}>
+                        <div className={`flex-1 ${c.bg} rounded-xl px-5 py-4 flex flex-col gap-1`}>
+                          <p className="text-[11px] font-medium text-gray-500">{stage.label}</p>
+                          <p className={`text-3xl font-bold ${c.text}`}>{stage.value.toLocaleString("de-DE")}</p>
+                          {stage.rate !== undefined && (
+                            <p className="text-[11px] text-gray-400">{stage.rate}% Conversion</p>
+                          )}
+                        </div>
+                        {i < analytics.pipeline.length - 1 && (
+                          <div className="flex items-center px-1 text-gray-200 text-2xl select-none">›</div>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+
+                {/* Progress bar */}
+                <div className="mt-4 flex h-1.5 rounded-full overflow-hidden gap-0.5">
+                  {analytics.pipeline.map((stage) => {
+                    const max = analytics.pipeline[0]?.value || 1;
+                    const pct = Math.max(2, Math.round((stage.value / max) * 100));
+                    const barColors: Record<string, string> = { blue: "bg-blue-500", indigo: "bg-indigo-500", violet: "bg-violet-500", emerald: "bg-emerald-500" };
+                    return <div key={stage.label} style={{ width: `${pct}%` }} className={`${barColors[stage.color] || "bg-blue-500"} rounded-full`} />;
+                  })}
+                </div>
+              </div>
+
+              {/* ── KPI Cards ── */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+                  <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Job-Pool</p>
+                  <p className="text-2xl font-bold text-gray-800 mt-1">{analytics.totalPool.toLocaleString("de-DE")}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Stellen gesamt</p>
+                </div>
+                <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+                  <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Reply-Rate</p>
+                  <p className="text-2xl font-bold text-indigo-600 mt-1">
+                    {analytics.totalSent ? Math.round((analytics.totalReceived / analytics.totalSent) * 100) : 0}%
+                  </p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">{analytics.totalReceived} Antworten</p>
+                </div>
+                <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+                  <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Gespräche</p>
+                  <p className="text-2xl font-bold text-violet-600 mt-1">{analytics.classificationCounts["interview_invite"] ?? 0}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Einladungen</p>
+                </div>
+                <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+                  <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Zusagen</p>
+                  <p className="text-2xl font-bold text-emerald-600 mt-1">{analytics.classificationCounts["offer"] ?? 0}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Jobangebote</p>
+                </div>
+              </div>
+
+              {/* ── Charts Row ── */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* Email Verlauf (last 30d) */}
+                <div className="lg:col-span-2 rounded-2xl border border-gray-100 bg-white shadow-sm p-5">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">E-Mail Verlauf — letzte 30 Tage</p>
+                  {(() => {
+                    const entries = Object.entries(analytics.emailsSentTimeSeries);
+                    const maxVal = Math.max(1, ...entries.map(([, v]) => v));
+                    return (
+                      <div className="flex items-end gap-0.5 h-28">
+                        {entries.map(([day, count]) => {
+                          const pct = (count / maxVal) * 100;
+                          const label = new Date(day).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+                          const isWeekend = [0, 6].includes(new Date(day).getDay());
+                          return (
+                            <div key={day} className="flex-1 flex flex-col items-center justify-end gap-0.5 group relative" title={`${label}: ${count}`}>
+                              <div
+                                style={{ height: `${Math.max(2, pct)}%` }}
+                                className={`w-full rounded-sm transition-all ${count > 0 ? (isWeekend ? "bg-gray-200" : "bg-blue-500 group-hover:bg-blue-600") : "bg-gray-100"}`}
+                              />
+                              <span className="absolute bottom-full mb-1 text-[9px] text-gray-600 bg-white border border-gray-100 rounded px-1 py-0.5 opacity-0 group-hover:opacity-100 whitespace-nowrap shadow-sm z-10">
+                                {label}: {count}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                  <div className="flex justify-between mt-1.5">
+                    <span className="text-[10px] text-gray-400">vor 30 Tagen</span>
+                    <span className="text-[10px] text-gray-400">heute</span>
+                  </div>
+                </div>
+
+                {/* Eingang-Typen */}
+                <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-5">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Eingang-Typen</p>
+                  <div className="space-y-2.5">
+                    {[
+                      { key: "interview_invite", label: "Vorstellungsgespräch", icon: "🎯", color: "bg-violet-500" },
+                      { key: "offer",            label: "Zusage",               icon: "🎉", color: "bg-emerald-500" },
+                      { key: "document_request", label: "Dokument-Anfrage",     icon: "📄", color: "bg-blue-500" },
+                      { key: "followup_request", label: "Rückfrage",            icon: "📩", color: "bg-amber-500" },
+                      { key: "rejection",        label: "Absage",               icon: "❌", color: "bg-red-400" },
+                      { key: "other",            label: "Sonstiges",            icon: "📧", color: "bg-gray-300" },
+                    ].map(({ key, label, icon, color }) => {
+                      const count = analytics.classificationCounts[key] ?? 0;
+                      const total = Object.values(analytics.classificationCounts).reduce((a, b) => a + b, 0) || 1;
+                      const pct = Math.round((count / total) * 100);
+                      return (
+                        <div key={key}>
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className="text-xs text-gray-600">{icon} {label}</span>
+                            <span className="text-xs font-semibold text-gray-700">{count}</span>
+                          </div>
+                          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div style={{ width: `${pct}%` }} className={`h-full ${color} rounded-full`} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Scraping Aktivität ── */}
+              <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-5">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Scraping Aktivität — letzte 14 Tage</p>
+                {(() => {
+                  const entries = Object.entries(analytics.scrapingTimeSeries);
+                  const maxVal = Math.max(1, ...entries.map(([, v]) => v));
+                  return (
+                    <div className="flex items-end gap-1 h-20">
+                      {entries.map(([day, count]) => {
+                        const pct = (count / maxVal) * 100;
+                        const label = new Date(day).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+                        return (
+                          <div key={day} className="flex-1 flex flex-col items-center justify-end gap-1 group relative">
+                            <div
+                              style={{ height: `${Math.max(2, pct)}%` }}
+                              className={`w-full rounded-sm ${count > 0 ? "bg-teal-500 group-hover:bg-teal-600" : "bg-gray-100"} transition-all`}
+                              title={`${label}: ${count} Jobs`}
+                            />
+                            <span className="text-[9px] text-gray-400 truncate">{label.slice(0, 5)}</span>
+                            <span className="absolute bottom-full mb-1 text-[9px] text-gray-600 bg-white border border-gray-100 rounded px-1 py-0.5 opacity-0 group-hover:opacity-100 whitespace-nowrap shadow-sm z-10">
+                              {label}: {count} Jobs
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* ── Kandidaten Pipeline ── */}
+              <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Kandidaten Pipeline</p>
+                  <p className="text-xs text-gray-400">{analytics.studentPipeline.length} Kandidaten</p>
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-[11px] text-gray-400 uppercase tracking-wider bg-gray-50/60 border-b border-gray-100">
+                      <th className="px-5 py-3 font-medium">Kandidat</th>
+                      <th className="px-4 py-3 font-medium text-right">Gesendet</th>
+                      <th className="px-4 py-3 font-medium text-right">Antworten</th>
+                      <th className="px-4 py-3 font-medium text-right">Gespräche</th>
+                      <th className="px-4 py-3 font-medium">Fortschritt</th>
+                      <th className="px-4 py-3 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analytics.studentPipeline.map((s) => {
+                      const replyRate = s.sent > 0 ? Math.round((s.received / s.sent) * 100) : 0;
+                      const statusColors: Record<string, string> = {
+                        "Vorstellungsgespräch": "bg-violet-100 text-violet-700",
+                        "Zusage Erhalten": "bg-emerald-100 text-emerald-700",
+                        "Vorzusage": "bg-green-100 text-green-700",
+                        "ja": "bg-blue-50 text-blue-600",
+                        "nein": "bg-gray-100 text-gray-500",
+                      };
+                      const statusCls = statusColors[s.aktiv] || "bg-gray-50 text-gray-500";
+                      return (
+                        <tr key={s.userId} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-2.5">
+                              <StudentAvatar name={s.name} fotoLink={s.fotoLink} />
+                              <div>
+                                <p className="text-xs font-semibold text-gray-800 truncate max-w-[120px]">{s.name}</p>
+                                <p className="text-[11px] text-gray-400 truncate max-w-[120px]">{s.ziel}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-xs font-semibold text-gray-700">{s.sent.toLocaleString("de-DE")}</td>
+                          <td className="px-4 py-3 text-right font-mono text-xs text-gray-600">{s.received} <span className="text-gray-400 font-normal">({replyRate}%)</span></td>
+                          <td className="px-4 py-3 text-right font-mono text-xs font-bold text-violet-600">{s.interviews}</td>
+                          <td className="px-4 py-3 min-w-[100px]">
+                            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                style={{ width: `${Math.min(100, replyRate)}%` }}
+                                className="h-full bg-gradient-to-r from-blue-400 to-indigo-500 rounded-full"
+                              />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-block text-[11px] font-medium px-2 py-0.5 rounded-full ${statusCls}`}>
+                              {s.aktiv || "—"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {analytics.studentPipeline.length === 0 && (
+                      <tr><td colSpan={6} className="px-5 py-10 text-center text-sm text-gray-400">Keine Daten</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       )}
