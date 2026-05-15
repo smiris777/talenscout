@@ -96,7 +96,20 @@ const STATUS_OPTIONS = [
 
 type SortKey = "name" | "credits" | "emailsTotal" | "emailsToday" | "scans" | "lastLogin";
 type SortDir = "asc" | "desc";
-type AdminTab = "studenten" | "leaderboard" | "aktionen" | "rewards";
+type AdminTab = "studenten" | "leaderboard" | "aktionen" | "rewards" | "posteingang";
+
+interface InboxEmail {
+  id: string;
+  user_id: string;
+  student_name: string;
+  student_email: string;
+  from_email: string;
+  from_name: string | null;
+  subject: string;
+  body_text: string | null;
+  received_at: string;
+  is_read: boolean;
+}
 
 interface ActionItem {
   id: string;
@@ -272,6 +285,14 @@ export function AdminDashboard() {
     error?: string;
   } | null>(null);
 
+  // Posteingang aller Studenten
+  const [inboxEmails, setInboxEmails] = useState<InboxEmail[]>([]);
+  const [inboxLoading, setInboxLoading] = useState(false);
+  const [inboxSyncing, setInboxSyncing] = useState(false);
+  const [inboxSyncMsg, setInboxSyncMsg] = useState("");
+  const [inboxSelected, setInboxSelected] = useState<InboxEmail | null>(null);
+  const [inboxStudentFilter, setInboxStudentFilter] = useState<string>("alle");
+
   // Arbeitsagentur-Scraping
   const [scrapeOpen, setScrapeOpen] = useState(false);
   const [scrapeWas, setScrapeWas] = useState("");
@@ -358,6 +379,34 @@ export function AdminDashboard() {
   useEffect(() => {
     if (activeTab === "rewards" && rewardRules.length === 0) fetchRewardRules();
   }, [activeTab, rewardRules.length, fetchRewardRules]);
+
+  const fetchInbox = useCallback(async () => {
+    setInboxLoading(true);
+    try {
+      const res = await fetch("/api/admin/inbox-overview");
+      const data = await res.json();
+      if (data.emails) setInboxEmails(data.emails);
+    } catch { /* silent */ }
+    setInboxLoading(false);
+  }, []);
+
+  const syncAllInboxes = useCallback(async () => {
+    setInboxSyncing(true);
+    setInboxSyncMsg("");
+    try {
+      const res = await fetch("/api/admin/inbox-overview", { method: "POST" });
+      const data = await res.json();
+      setInboxSyncMsg(data.message || "Fertig");
+      await fetchInbox();
+    } catch {
+      setInboxSyncMsg("Fehler beim Synchronisieren");
+    }
+    setInboxSyncing(false);
+  }, [fetchInbox]);
+
+  useEffect(() => {
+    if (activeTab === "posteingang" && inboxEmails.length === 0) fetchInbox();
+  }, [activeTab, inboxEmails.length, fetchInbox]);
 
   function updateForm(field: keyof StudentFormData, value: string | number) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -1118,6 +1167,7 @@ export function AdminDashboard() {
           { key: "aktionen" as AdminTab, label: "Aktionen", icon: "⚡", badge: urgentCount > 0 ? urgentCount : null },
           { key: "leaderboard" as AdminTab, label: "Leaderboard", icon: "🏆", badge: null },
           { key: "rewards" as AdminTab, label: "XP-Regeln", icon: "🎯", badge: null },
+          { key: "posteingang" as AdminTab, label: "Posteingang", icon: "📬", badge: inboxEmails.filter(e => !e.is_read).length || null },
         ]).map((tab) => (
           <button
             key={tab.key}
@@ -1479,6 +1529,145 @@ export function AdminDashboard() {
                   )}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Posteingang Tab ── */}
+      {activeTab === "posteingang" && (
+        <div className="space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h3 className="text-base font-semibold text-gray-800">Posteingang – Alle Kandidaten</h3>
+              <p className="text-xs text-gray-400">Antworten von Unternehmen auf gesendete Bewerbungen</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={inboxStudentFilter}
+                onChange={(e) => setInboxStudentFilter(e.target.value)}
+                className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+              >
+                <option value="alle">Alle Kandidaten</option>
+                {Array.from(new Set(inboxEmails.map((e) => e.student_name))).sort().map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+              <button
+                onClick={syncAllInboxes}
+                disabled={inboxSyncing}
+                className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm flex items-center gap-1.5"
+              >
+                {inboxSyncing ? (
+                  <><span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" /> Sync läuft…</>
+                ) : "📥 Sync"}
+              </button>
+              <button
+                onClick={fetchInbox}
+                disabled={inboxLoading}
+                className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                Aktualisieren
+              </button>
+            </div>
+          </div>
+
+          {inboxSyncMsg && (
+            <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
+              {inboxSyncMsg}
+            </div>
+          )}
+
+          {inboxLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="w-7 h-7 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            <div className="flex gap-4" style={{ minHeight: "400px" }}>
+              {/* Email list */}
+              <div className="flex-1 rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+                {(() => {
+                  const filtered = inboxStudentFilter === "alle"
+                    ? inboxEmails
+                    : inboxEmails.filter((e) => e.student_name === inboxStudentFilter);
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="text-center py-16">
+                        <p className="text-4xl mb-3">📭</p>
+                        <p className="text-sm font-medium text-gray-600">Keine Emails</p>
+                        <p className="text-xs text-gray-400 mt-1">Klicke auf Sync um den Posteingang zu laden.</p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <ul className="divide-y divide-gray-50">
+                      {filtered.map((email) => (
+                        <li
+                          key={email.id}
+                          onClick={() => setInboxSelected(email)}
+                          className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50/70 transition-colors ${inboxSelected?.id === email.id ? "bg-blue-50/60" : ""}`}
+                        >
+                          {!email.is_read && (
+                            <span className="mt-1.5 w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                          )}
+                          {email.is_read && <span className="mt-1.5 w-2 h-2 shrink-0" />}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-semibold text-gray-800 truncate">
+                                {email.from_name || email.from_email}
+                              </span>
+                              <span className="text-[10px] text-gray-400 shrink-0">
+                                {new Date(email.received_at).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-600 truncate mt-0.5">{email.subject}</p>
+                            <span className="inline-block mt-1 text-[10px] bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-full px-2 py-0.5 font-medium">
+                              {email.student_name}
+                            </span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                })()}
+              </div>
+
+              {/* Email detail */}
+              {inboxSelected ? (
+                <div className="w-96 rounded-2xl border border-gray-100 bg-white shadow-sm p-5 flex flex-col gap-3 overflow-auto">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{inboxSelected.subject}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Von: <span className="font-medium">{inboxSelected.from_name || inboxSelected.from_email}</span>
+                        {inboxSelected.from_name && <span className="text-gray-400"> &lt;{inboxSelected.from_email}&gt;</span>}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Kandidat: <span className="font-medium text-indigo-600">{inboxSelected.student_name}</span>
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {new Date(inboxSelected.received_at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setInboxSelected(null)}
+                      className="text-gray-400 hover:text-gray-600 text-lg leading-none shrink-0"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="border-t border-gray-100 pt-3">
+                    <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
+                      {inboxSelected.body_text || "(Kein Text)"}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="w-96 rounded-2xl border border-gray-100 bg-gray-50/50 flex items-center justify-center text-gray-400 text-sm">
+                  Email auswählen
+                </div>
+              )}
             </div>
           )}
         </div>
