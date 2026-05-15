@@ -113,6 +113,8 @@ interface InboxEmail {
 
 interface ScrapeStatus {
   activeTerms: string[];
+  studentTerms: string[];
+  extraTerms: Array<{ id: string; term: string; is_active: boolean }>;
   lastRunAt: string | null;
   isLikelyRunning: boolean;
   todayInserted: number;
@@ -320,6 +322,10 @@ export function AdminDashboard() {
   const [scrapeStatus, setScrapeStatus] = useState<ScrapeStatus | null>(null);
   const [scrapeStatusLoading, setScrapeStatusLoading] = useState(false);
 
+  // Extra scrape terms management
+  const [newTermInput, setNewTermInput] = useState("");
+  const [newTermLoading, setNewTermLoading] = useState(false);
+
   // Stelle manuell hinzufügen
   const [addStelleOpen, setAddStelleOpen] = useState(false);
   const [addStelleForm, setAddStelleForm] = useState({ firmenname: "", email: "", bereich: "", name: "", geschlecht: "", telefonnummer: "", notizen: "" });
@@ -469,6 +475,37 @@ export function AdminDashboard() {
       setAddStelleMsg({ type: "err", text: "Netzwerkfehler" });
     }
     setAddStelleLoading(false);
+  }
+
+  async function handleAddTerm() {
+    if (!newTermInput.trim() || newTermInput.trim().length < 3) return;
+    setNewTermLoading(true);
+    await fetch("/api/admin/scrape-terms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ term: newTermInput.trim() }),
+    });
+    setNewTermInput("");
+    await fetchScrapeStatus();
+    setNewTermLoading(false);
+  }
+
+  async function handleDeleteTerm(id: string) {
+    await fetch("/api/admin/scrape-terms", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    await fetchScrapeStatus();
+  }
+
+  async function handleToggleTerm(id: string, is_active: boolean) {
+    await fetch("/api/admin/scrape-terms", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, is_active }),
+    });
+    await fetchScrapeStatus();
   }
 
   const fetchInbox = useCallback(async () => {
@@ -961,71 +998,84 @@ export function AdminDashboard() {
 
       {/* ── Scraping Live-Status (immer sichtbar) ── */}
       <div className={`rounded-2xl border shadow-sm transition-colors ${scrapeStatus?.isLikelyRunning ? "border-teal-300 bg-teal-50/60" : "border-gray-100 bg-white"}`}>
-        <div className="flex items-center justify-between px-5 py-3 gap-3 flex-wrap">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="text-lg shrink-0">🔎</span>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-semibold text-gray-800">Scraping-Status</span>
-                {scrapeStatus?.isLikelyRunning ? (
-                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-teal-700 bg-teal-100 border border-teal-200 rounded-full px-2 py-0.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse inline-block" />
-                    Läuft gerade
+        {/* ── Top row: status + counters ── */}
+        <div className="flex items-center justify-between px-5 py-3 gap-3 flex-wrap border-b border-gray-50">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-base">🔎</span>
+            <span className="text-sm font-semibold text-gray-800">Automatisches Scraping</span>
+            {scrapeStatus?.isLikelyRunning ? (
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-teal-700 bg-teal-100 border border-teal-200 rounded-full px-2 py-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse inline-block" />
+                Läuft gerade
+              </span>
+            ) : scrapeStatus?.lastRunAt ? (
+              <span className="text-[11px] text-gray-400">Zuletzt: {new Date(scrapeStatus.lastRunAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+            ) : null}
+            {!scrapeStatus?.isLikelyRunning && scrapeStatus?.nextRunsUTC[0] && (
+              <span className="text-[11px] text-gray-400">· Nächster Lauf: {new Date(scrapeStatus.nextRunsUTC[0]).toLocaleString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr</span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="text-xs text-gray-500"><span className="font-semibold text-gray-700">{scrapeStatus?.todayInserted ?? "—"}</span> heute · <span className="font-semibold text-gray-700">{scrapeStatus?.weekInserted ?? "—"}</span> diese Woche</span>
+            <button onClick={fetchScrapeStatus} disabled={scrapeStatusLoading} className="px-2 py-1 text-xs bg-white border border-gray-200 text-gray-400 rounded-lg hover:bg-gray-50 transition-colors">
+              {scrapeStatusLoading ? "…" : "↻"}
+            </button>
+          </div>
+        </div>
+
+        {/* ── Terms rows ── */}
+        <div className="px-5 py-3 space-y-2.5">
+          {/* Student terms (read-only) */}
+          {scrapeStatus && scrapeStatus.studentTerms.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] text-gray-400 font-medium shrink-0">👥 Studenten-Ziele:</span>
+              {scrapeStatus.studentTerms.map((term) => {
+                const stat = scrapeStatus.lastRunStats.find((s) => s.bereich?.toLowerCase().includes(term.toLowerCase()) || term.toLowerCase().includes((s.bereich ?? "").toLowerCase()));
+                return (
+                  <span key={term} className={`text-[11px] px-2 py-0.5 rounded-full border font-medium ${scrapeStatus.isLikelyRunning ? "bg-teal-100 text-teal-700 border-teal-200" : "bg-gray-100 text-gray-600 border-gray-200"}`}>
+                    {term}{stat && stat.inserted > 0 ? <span className="ml-1 text-teal-600 font-semibold">+{stat.inserted}</span> : ""}
                   </span>
-                ) : scrapeStatus?.lastRunAt ? (
-                  <span className="text-[11px] text-gray-400">
-                    Zuletzt: {new Date(scrapeStatus.lastRunAt).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                ) : null}
-                {!scrapeStatus?.isLikelyRunning && scrapeStatus?.nextRunsUTC[0] && (
-                  <span className="text-[11px] text-gray-400">
-                    · Nächster Lauf: {new Date(scrapeStatus.nextRunsUTC[0]).toLocaleString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr
-                  </span>
-                )}
-              </div>
-              {/* Active search terms */}
-              {scrapeStatus && (
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {scrapeStatus.activeTerms.slice(0, 12).map((term) => {
-                    const stat = scrapeStatus.lastRunStats.find((s) => s.bereich?.toLowerCase().includes(term.toLowerCase()) || term.toLowerCase().includes(s.bereich?.toLowerCase() ?? ""));
-                    return (
-                      <span
-                        key={term}
-                        className={`text-[11px] px-2 py-0.5 rounded-full border font-medium ${scrapeStatus.isLikelyRunning ? "bg-teal-100 text-teal-700 border-teal-200" : "bg-gray-100 text-gray-600 border-gray-200"}`}
-                        title={stat ? `+${stat.inserted} heute` : ""}
-                      >
-                        {term}{stat && stat.inserted > 0 ? ` +${stat.inserted}` : ""}
-                      </span>
-                    );
-                  })}
-                  {(scrapeStatus.activeTerms.length > 12) && (
-                    <span className="text-[11px] text-gray-400 self-center">+{scrapeStatus.activeTerms.length - 12} weitere</span>
-                  )}
-                  {scrapeStatus.activeTerms.length === 0 && (
-                    <span className="text-[11px] text-amber-600">Keine aktiven Studenten-Ziele — Scraping inaktiv</span>
-                  )}
-                </div>
-              )}
+                );
+              })}
             </div>
+          )}
+
+          {/* Extra terms (editable) */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-gray-400 font-medium shrink-0">➕ Manuell hinzugefügt:</span>
+            {scrapeStatus?.extraTerms.map((et) => {
+              const stat = scrapeStatus.lastRunStats.find((s) => s.bereich?.toLowerCase().includes(et.term.toLowerCase()) || et.term.toLowerCase().includes((s.bereich ?? "").toLowerCase()));
+              return (
+                <span key={et.id} className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border font-medium transition-opacity ${et.is_active ? "bg-blue-100 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-400 border-gray-200 opacity-60"}`}>
+                  <button onClick={() => handleToggleTerm(et.id, !et.is_active)} title={et.is_active ? "Deaktivieren" : "Aktivieren"} className="hover:opacity-70">
+                    {et.is_active ? "●" : "○"}
+                  </button>
+                  {et.term}{stat && stat.inserted > 0 ? <span className="ml-0.5 text-teal-600 font-semibold">+{stat.inserted}</span> : ""}
+                  <button onClick={() => handleDeleteTerm(et.id)} className="ml-0.5 hover:text-red-500 transition-colors" title="Entfernen">×</button>
+                </span>
+              );
+            })}
+            {(!scrapeStatus?.extraTerms || scrapeStatus.extraTerms.length === 0) && (
+              <span className="text-[11px] text-gray-400 italic">Noch keine manuellen Suchbegriffe</span>
+            )}
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="text-right">
-              <p className="text-xs font-semibold text-gray-700">{scrapeStatus?.todayInserted ?? "—"} <span className="font-normal text-gray-400">heute</span></p>
-              <p className="text-[11px] text-gray-400">{scrapeStatus?.weekInserted ?? "—"} diese Woche im Pool</p>
-            </div>
+          {/* Add new term input */}
+          <div className="flex items-center gap-2 pt-0.5">
+            <input
+              type="text"
+              value={newTermInput}
+              onChange={(e) => setNewTermInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddTerm()}
+              placeholder="Beruf zum Scraping hinzufügen, z. B. Altenpflegehelfer…"
+              className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-300 max-w-sm"
+            />
             <button
-              onClick={() => setAddStelleOpen(true)}
-              className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm whitespace-nowrap"
+              onClick={handleAddTerm}
+              disabled={newTermLoading || newTermInput.trim().length < 3}
+              className="px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors whitespace-nowrap"
             >
-              + Stelle hinzufügen
-            </button>
-            <button
-              onClick={fetchScrapeStatus}
-              disabled={scrapeStatusLoading}
-              className="px-2.5 py-1.5 text-xs bg-white border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              {scrapeStatusLoading ? "…" : "↻"}
+              {newTermLoading ? "…" : "+ Zur Suche hinzufügen"}
             </button>
           </div>
         </div>

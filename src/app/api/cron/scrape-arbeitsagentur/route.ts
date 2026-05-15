@@ -36,11 +36,23 @@ export async function GET(request: Request) {
 
   const ziele = (students ?? [])
     .map((s) => (s as Record<string, unknown>).Ziel as string | null);
-  const searchTerms = studentZieleToSearchTerms(ziele);
+  const studentTerms = studentZieleToSearchTerms(ziele);
+
+  // Extra terms from admin (scrape_extra_terms table)
+  const { data: extraTermsRows } = await supabase
+    .from("scrape_extra_terms")
+    .select("term")
+    .eq("is_active", true);
+
+  const extraTerms = (extraTermsRows ?? []).map((r) => r.term as string);
+
+  // Merge: extra terms always included, student terms de-duped
+  const allTermsSet = new Set<string>([...extraTerms, ...studentTerms]);
+  const searchTerms = Array.from(allTermsSet);
 
   if (searchTerms.length === 0) {
     return NextResponse.json({
-      message: "Keine Such-Begriffe (keine aktiven Studenten mit Ziel)",
+      message: "Keine Such-Begriffe (keine aktiven Studenten mit Ziel und keine Extra-Begriffe)",
       perSearch: [],
     });
   }

@@ -48,8 +48,9 @@ export async function GET() {
   const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).toISOString();
   const tenMinAgo = new Date(now.getTime() - 10 * 60 * 1000).toISOString();
 
-  const [studentsRes, lastJobRes, recentJobsRes, todayBewRes, weekBewRes, recentPerTermRes] = await Promise.all([
+  const [studentsRes, extraTermsRes, lastJobRes, recentJobsRes, todayBewRes, weekBewRes, recentPerTermRes] = await Promise.all([
     admin.from("ausbildung_main_engine").select(`"Ziel"`).eq("student_active", true),
+    admin.from("scrape_extra_terms").select("id, term, is_active").order("created_at", { ascending: false }),
     admin.from("scraped_jobs_log").select("created_at").order("created_at", { ascending: false }).limit(1),
     admin.from("scraped_jobs_log").select("created_at, bereich, had_email, skipped_reason").gte("created_at", tenMinAgo).order("created_at", { ascending: false }).limit(50),
     admin.from("bewerbungen").select("*", { count: "exact", head: true }).gte("created_at", todayStart),
@@ -58,7 +59,11 @@ export async function GET() {
   ]);
 
   const ziele = (studentsRes.data ?? []).map((s) => (s as Record<string, unknown>).Ziel as string | null);
-  const activeTerms = studentZieleToSearchTerms(ziele);
+  const studentTerms = studentZieleToSearchTerms(ziele);
+  const extraTerms = extraTermsRes.data ?? [];
+  const activeExtraTermNames = extraTerms.filter((t) => t.is_active).map((t) => t.term);
+  const allTermsSet = new Set([...activeExtraTermNames, ...studentTerms]);
+  const activeTerms = Array.from(allTermsSet);
 
   const lastRunAt = lastJobRes.data?.[0]?.created_at ?? null;
   const isLikelyRunning = recentJobsRes.data !== null && recentJobsRes.data.length > 0;
@@ -74,6 +79,8 @@ export async function GET() {
 
   return NextResponse.json({
     activeTerms,
+    studentTerms,
+    extraTerms,
     lastRunAt,
     isLikelyRunning,
     todayInserted: todayBewRes.count ?? 0,
