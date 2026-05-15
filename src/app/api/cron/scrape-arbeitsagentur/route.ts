@@ -5,10 +5,10 @@ import { ingestBatch, studentZieleToSearchTerms } from "@/lib/scraping/ingest";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-// Default-Suchparameter für den nächtlichen Cron-Lauf
+// Default-Suchparameter für den Cron-Lauf
 const DEFAULT_SIZE = 25;
-const DEFAULT_PAGES = 2; // pro Beruf bis zu 50 Stellen pro Lauf
-const MAX_INSERTS_PER_RUN = 200;
+const DEFAULT_PAGES = 5; // pro Beruf bis zu 125 Stellen pro Lauf
+const MAX_INSERTS_PER_RUN = 500;
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
