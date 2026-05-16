@@ -106,24 +106,35 @@ export async function POST(request: Request) {
 
   let poolSource = assignedCompanies ?? [];
 
-  // Strategy 2: fallback to global bereich filter if no assignments
+  // Strategy 2: fallback to global pool with broad content search
   if (poolSource.length === 0) {
-    console.log(`[manual-send] No assigned Stellen, falling back to bereich filter`);
-    const bereiche = getMatchingBereiche(studentZiel);
-    if (bereiche.length === 0) {
+    console.log(`[manual-send] No assigned Stellen, falling back to global content search`);
+    const keywords = getMatchingBereiche(studentZiel);
+    if (keywords.length === 0) {
       return NextResponse.json({ error: `Kein Bereich erkannt für Ziel: "${studentZiel}" — bitte Ziel anpassen.` }, { status: 400 });
     }
+
+    // Search across bereich + firmenname + additional fields — broad match, not strict
+    const orConditions = keywords.flatMap((kw) => [
+      `bereich.ilike.%${kw}%`,
+      `firmenname.ilike.%${kw}%`,
+      `zusatzinfo.ilike.%${kw}%`,
+      `caption.ilike.%${kw}%`,
+    ]);
+
     const { data: globalCompanies, error: globalErr } = await supabase
       .from("bewerbungen")
       .select("email, firmenname, telefonnummer, geschlecht, name, bereich")
-      .or(bereiche.map((b) => `bereich.ilike.%${b}%`).join(","))
+      .or(orConditions.join(","))
       .not("email", "is", null)
-      .limit(3000);
+      .limit(5000);
+
     if (globalErr) {
       console.error("[manual-send] global query error:", globalErr.message);
       return NextResponse.json({ error: "Datenbankfehler: " + globalErr.message }, { status: 500 });
     }
     poolSource = globalCompanies ?? [];
+    console.log(`[manual-send] Global pool returned ${poolSource.length} via keywords: [${keywords.join(", ")}]`);
   }
 
   console.log(`[manual-send] Pool size: ${poolSource.length}, already sent: ${sentEmails.size}`);

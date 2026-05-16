@@ -56,7 +56,7 @@ export function getMatchingBereiche(ziel: string): string[] {
     const parts = core
       .split(/[\s\-\/]+/)
       .map((w) => w.trim())
-      .filter((w) => w.length >= 4 && !STOP_WORDS.has(w.toLowerCase()));
+      .filter((w) => w.length >= 3 && !STOP_WORDS.has(w.toLowerCase()));
 
     for (const part of parts) {
       terms.add(part);
