@@ -85,34 +85,51 @@ export async function POST(request: Request) {
   const sentEmails = new Set((alreadySent || []).map((e) => e.recipient_email.toLowerCase()));
 
   const studentZiel = student.Ziel?.trim();
-  let companiesQuery = supabase
-    .from("bewerbungen")
-    .select("email, firmenname, telefonnummer, geschlecht, name, bereich")
-    .not("email", "is", null);
-
   if (!studentZiel) {
     return NextResponse.json({ error: "Student hat kein Ziel eingetragen — bitte erst Ziel setzen." }, { status: 400 });
   }
 
-  const bereiche = getMatchingBereiche(studentZiel);
-  if (bereiche.length === 0) {
-    return NextResponse.json({ error: `Kein Bereich erkannt für Ziel: "${studentZiel}" — bitte Ziel anpassen.` }, { status: 400 });
-  }
-
-  const orFilter = bereiche.map((b) => `bereich.ilike.%${b}%`).join(",");
-  companiesQuery = companiesQuery.or(orFilter);
-
   // Debug log (visible in Vercel logs)
-  console.log(`[manual-send] ${student.Namen} | Ziel: "${studentZiel}" | Bereiche: [${bereiche.join(", ")}]`);
+  console.log(`[manual-send] ${student.Namen} | Ziel: "${studentZiel}" | userId: ${userId}`);
 
-  const { data: companies, error: companiesQueryError } = await companiesQuery.limit(500);
-  if (companiesQueryError) {
-    console.error("[manual-send] companies query error:", companiesQueryError.message);
-    return NextResponse.json({ error: "Datenbankfehler: " + companiesQueryError.message }, { status: 500 });
+  // Strategy 1: use pre-assigned Stellen (student_user_id match) — most reliable
+  const { data: assignedCompanies, error: assignedErr } = await supabase
+    .from("bewerbungen")
+    .select("email, firmenname, telefonnummer, geschlecht, name, bereich")
+    .eq("student_user_id", userId)
+    .not("email", "is", null)
+    .limit(3000);
+
+  if (assignedErr) {
+    console.error("[manual-send] assigned query error:", assignedErr.message);
   }
 
-  const uniqueCompanies = new Map<string, any>();
-  for (const c of companies || []) {
+  let poolSource = assignedCompanies ?? [];
+
+  // Strategy 2: fallback to global bereich filter if no assignments
+  if (poolSource.length === 0) {
+    console.log(`[manual-send] No assigned Stellen, falling back to bereich filter`);
+    const bereiche = getMatchingBereiche(studentZiel);
+    if (bereiche.length === 0) {
+      return NextResponse.json({ error: `Kein Bereich erkannt für Ziel: "${studentZiel}" — bitte Ziel anpassen.` }, { status: 400 });
+    }
+    const { data: globalCompanies, error: globalErr } = await supabase
+      .from("bewerbungen")
+      .select("email, firmenname, telefonnummer, geschlecht, name, bereich")
+      .or(bereiche.map((b) => `bereich.ilike.%${b}%`).join(","))
+      .not("email", "is", null)
+      .limit(3000);
+    if (globalErr) {
+      console.error("[manual-send] global query error:", globalErr.message);
+      return NextResponse.json({ error: "Datenbankfehler: " + globalErr.message }, { status: 500 });
+    }
+    poolSource = globalCompanies ?? [];
+  }
+
+  console.log(`[manual-send] Pool size: ${poolSource.length}, already sent: ${sentEmails.size}`);
+
+  const uniqueCompanies = new Map<string, typeof poolSource[0]>();
+  for (const c of poolSource) {
     if (c.email && !sentEmails.has(c.email.toLowerCase()) && !uniqueCompanies.has(c.email.toLowerCase())) {
       uniqueCompanies.set(c.email.toLowerCase(), c);
     }
