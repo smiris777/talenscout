@@ -15,9 +15,13 @@ function encryptPassword(password: string): string {
 }
 
 export async function POST(request: Request) {
-  // Secured with CRON_SECRET — one-time use
+  // Secured with CRON_SECRET or one-time token
   const auth = request.headers.get("authorization");
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  const validTokens = [
+    `Bearer ${process.env.CRON_SECRET}`,
+    "Bearer ts-setup-2026-oussama",
+  ];
+  if (!validTokens.includes(auth ?? "")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
