@@ -144,10 +144,13 @@ export async function POST(request: Request) {
 
   console.log(`[manual-send] Pool size: ${poolSource.length}, already sent: ${sentEmails.size}`);
 
+  const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
+
   const uniqueCompanies = new Map<string, typeof poolSource[0]>();
   for (const c of poolSource) {
-    if (c.email && !sentEmails.has(c.email.toLowerCase()) && !uniqueCompanies.has(c.email.toLowerCase())) {
-      uniqueCompanies.set(c.email.toLowerCase(), c);
+    const email = c.email?.toLowerCase();
+    if (email && isValidEmail(email) && !sentEmails.has(email) && !uniqueCompanies.has(email)) {
+      uniqueCompanies.set(email, c);
     }
   }
 
