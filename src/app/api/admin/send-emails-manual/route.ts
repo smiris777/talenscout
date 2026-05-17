@@ -104,10 +104,15 @@ export async function POST(request: Request) {
     console.error("[manual-send] assigned query error:", assignedErr.message);
   }
 
-  let poolSource = assignedCompanies ?? [];
+  // Filter assigned companies against already-sent emails
+  const assignedFiltered = (assignedCompanies ?? []).filter(
+    (c) => c.email && !sentEmails.has(c.email.toLowerCase())
+  );
 
-  // Strategy 2: fallback to global pool with broad content search
-  if (poolSource.length === 0) {
+  let poolSource: typeof assignedFiltered = assignedFiltered;
+
+  // Strategy 2: fallback to global pool if assigned pool is exhausted
+  if (assignedFiltered.length === 0) {
     console.log(`[manual-send] No assigned Stellen, falling back to global content search`);
     const keywords = getMatchingBereiche(studentZiel);
     if (keywords.length === 0) {
