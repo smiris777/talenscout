@@ -163,15 +163,25 @@ export async function POST(request: Request) {
 
   for (const target of targets) {
     try {
-      const personalized = await personalizeEmail({
-        studentName: student.Namen || "",
-        studentZiel: student.Ziel || "",
-        deutschNiveau: student["Deutsch Niveau"] || "",
-        motivationsschreiben: student.Motivationsschreiben || "",
-        companyName: target.firmenname || "",
-        contactName: target.name || undefined,
-        contactGender: target.geschlecht || undefined,
-      });
+      // Personalize with 8s timeout — fall back to generic if AI is slow
+      const personalized = await Promise.race([
+        personalizeEmail({
+          studentName: student.Namen || "",
+          studentZiel: student.Ziel || "",
+          deutschNiveau: student["Deutsch Niveau"] || "",
+          motivationsschreiben: student.Motivationsschreiben || "",
+          companyName: target.firmenname || "",
+          contactName: target.name || undefined,
+          contactGender: target.geschlecht || undefined,
+        }),
+        new Promise<Awaited<ReturnType<typeof personalizeEmail>>>((resolve) =>
+          setTimeout(() => resolve({
+            anrede: target.geschlecht === "w" ? "Sehr geehrte Damen und Herren" : "Sehr geehrte Damen und Herren",
+            einleitung: `hiermit bewerbe ich mich um einen Ausbildungsplatz als ${student.Ziel || "Azubi"} in Ihrem Unternehmen.`,
+            motivationAngepasst: student.Motivationsschreiben || "",
+          }), 8000)
+        ),
+      ]);
 
       const fotoUrl = getGDriveThumbnailUrl(student.BewerbungsfotoLink);
       const driveFolderUrl = student.drive_folder_id
@@ -221,7 +231,7 @@ export async function POST(request: Request) {
 
       log.push({ company: target.firmenname || "Unbekannt", email: target.email, status: "sent" });
       sentCount++;
-      await sleep(1500);
+      await sleep(600);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : "Unbekannter Fehler";
       await supabase.from("email_send_log").insert({
