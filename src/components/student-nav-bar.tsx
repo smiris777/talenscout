@@ -26,6 +26,7 @@ export function StudentNavBar({
 
   const navItems = [
     { href: "/dashboard", label: "Dashboard" },
+    { href: "/jobs", label: "Jobs" },
     { href: "/scan", label: "Scan & Apply", badge: scanCount },
     { href: "/bewerbungen", label: "Bewerbungen" },
     { href: "/aufgaben", label: "Aufgaben", badge: pendingTasks },
