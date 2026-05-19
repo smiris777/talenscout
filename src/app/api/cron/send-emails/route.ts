@@ -12,6 +12,8 @@ import { awardXP } from "@/lib/rewards/engine";
 export const runtime = "nodejs";
 
 const DELAY_BETWEEN_SENDS_MS = 1500;
+const MAX_RUN_MS = 270 * 1000;             // 270s von 300s budget — buffer for cleanup
+const POOL_FETCH_LIMIT = 2000;             // höher als 500, neueste Firmen zuerst
 
 /** Warm-up schedule based on days since Gmail was set up */
 function getDailyLimit(credCreatedAt: string): number {
@@ -40,7 +42,8 @@ export async function GET(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const results: Array<{ student: string; sent: number; errors: number }> = [];
+  const results: Array<{ student: string; sent: number; errors: number; skipped?: string }> = [];
+  const runStart = Date.now();
 
   // 1. Get all active students with email enabled
   const { data: students } = await supabase
@@ -57,6 +60,17 @@ export async function GET(request: Request) {
 
   for (const student of students) {
     if (!student.user_id) continue;
+
+    // Time budget — fair Distribution: nicht ein Student verbraucht alles
+    if (Date.now() - runStart > MAX_RUN_MS) {
+      results.push({
+        student: student.Namen || student.first_name || "Unknown",
+        sent: 0,
+        errors: 0,
+        skipped: "time-budget-exhausted",
+      });
+      continue;
+    }
 
     let sentCount = 0;
     let errorCount = 0;
@@ -140,7 +154,11 @@ export async function GET(request: Request) {
         continue;
       }
 
-      const { data: companies, error: companiesError } = await companiesQuery.limit(500);
+      // Order by id DESC: neueste Firmen (vom Scraper) zuerst — gibt Studenten mit
+      // hoher Sende-Historie eine Chance auf frische Treffer
+      const { data: companies, error: companiesError } = await companiesQuery
+        .order("id", { ascending: false })
+        .limit(POOL_FETCH_LIMIT);
       if (companiesError) {
         console.error("Companies query error:", companiesError.message);
       }
@@ -156,6 +174,8 @@ export async function GET(request: Request) {
 
       // 6. Send emails
       for (const target of targets) {
+        // Time budget check vor jedem Send (Anthropic+SMTP kann 5-10s dauern)
+        if (Date.now() - runStart > MAX_RUN_MS) break;
         try {
           // AI personalization
           const personalized = await personalizeEmail({
