@@ -19,14 +19,14 @@ export async function GET(request: Request) {
   const search = (searchParams.get("q") ?? "").trim();
   const maxAgeDays = parseInt(searchParams.get("maxAgeDays") ?? "0", 10) || 0;
   const onlyMyBereich = searchParams.get("onlyMine") === "1";
-  const onlyNew = searchParams.get("onlyNew") === "1"; // schon kontaktiert ausblenden
+  const onlyNew = searchParams.get("onlyNew") === "1";
 
   const admin = createAdmin(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
-  // Student-Daten für Default-Filter (Ziel → Bereich)
+  // Studenten-Ziel laden für Default-Bereich-Filter
   const { data: student } = await admin
     .from("ausbildung_main_engine")
     .select(`"Ziel"`)
@@ -35,99 +35,68 @@ export async function GET(request: Request) {
 
   const ziel = (student as Record<string, unknown> | null)?.["Ziel"] as string | undefined;
 
-  // Schon kontaktierte Emails für Markierung "bereits beworben"
-  const { data: sentLog } = await admin
-    .from("email_send_log")
-    .select("recipient_email")
-    .eq("user_id", user.id);
-
-  const sentEmails = new Set(
-    (sentLog ?? [])
-      .map((e) => (e as { recipient_email: string | null }).recipient_email?.toLowerCase())
-      .filter((e): e is string => !!e),
-  );
-
-  // Query bauen
-  let q = admin
-    .from("bewerbungen")
-    .select("id, firmenname, email, telefonnummer, bereich, name, geschlecht, zusatzinfo, created_at", { count: "exact" })
-    .not("email", "is", null);
-
-  // Filter 1: Volltextsuche über firmenname / bereich
-  if (search) {
-    const escaped = search.replace(/[%_,]/g, "");
-    if (escaped.length >= 2) {
-      q = q.or(`firmenname.ilike.%${escaped}%,bereich.ilike.%${escaped}%`);
-    }
-  }
-
-  // Filter 2: Nur Treffer im Ziel-Bereich des Studenten
+  // Bereich-Terms aus Studenten-Ziel ableiten (nur wenn Filter aktiv)
+  let bereichTerms: string[] | null = null;
   if (onlyMyBereich && ziel) {
-    const bereiche = getMatchingBereiche(ziel);
-    if (bereiche.length > 0) {
-      const orFilter = bereiche
-        .map((b) => `bereich.ilike.%${b.replace(/[%_,]/g, "")}%`)
-        .join(",");
-      q = q.or(orFilter);
+    const terms = getMatchingBereiche(ziel);
+    if (terms.length > 0) {
+      bereichTerms = terms;
     }
   }
 
-  // Filter 3: maxAgeDays — created_at >= jetzt - X Tage
-  if (maxAgeDays > 0) {
-    const since = new Date(Date.now() - maxAgeDays * 86400000).toISOString();
-    q = q.gte("created_at", since);
-  }
+  // Cleanup search input (Sonderzeichen, die SQL ILIKE stören könnten)
+  const cleanSearch = search.length >= 2 ? search.replace(/[%_]/g, "") : null;
 
-  // Sort: neueste zuerst
-  q = q.order("created_at", { ascending: false });
+  // RPC: macht ALLES server-side — Filter, Dedup, Pagination, Count in einer Query.
+  // Damit ist Seite 1 nicht mehr leer, wenn bereits beworbene rausgefiltert werden.
+  const { data, error } = await admin.rpc("student_jobs", {
+    p_user_id: user.id,
+    p_search: cleanSearch,
+    p_max_age_days: maxAgeDays > 0 ? maxAgeDays : null,
+    p_bereich_terms: bereichTerms,
+    p_only_new: onlyNew,
+    p_offset: (page - 1) * PAGE_SIZE,
+    p_limit: PAGE_SIZE,
+  });
 
-  // Pagination
-  const from = (page - 1) * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
-  q = q.range(from, to);
-
-  const { data, count, error } = await q;
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  let jobs = (data ?? []).map((row) => {
-    const r = row as {
-      id: number;
-      firmenname: string | null;
-      email: string | null;
-      telefonnummer: string | null;
-      bereich: string | null;
-      name: string | null;
-      geschlecht: string | null;
-      zusatzinfo: string | null;
-      created_at: string | null;
-    };
-    const alreadyApplied = r.email ? sentEmails.has(r.email.toLowerCase()) : false;
-    return {
-      id: r.id,
-      firmenname: r.firmenname,
-      email: r.email,
-      telefonnummer: r.telefonnummer,
-      bereich: r.bereich,
-      ansprechpartner: r.name,
-      geschlecht: r.geschlecht,
-      zusatzinfo: r.zusatzinfo,
-      created_at: r.created_at,
-      alreadyApplied,
-    };
-  });
+  const rows = (data ?? []) as Array<{
+    id: number;
+    firmenname: string | null;
+    email: string | null;
+    telefonnummer: string | null;
+    bereich: string | null;
+    name: string | null;
+    geschlecht: string | null;
+    zusatzinfo: string | null;
+    created_at: string | null;
+    already_applied: boolean;
+    total: number | string;
+  }>;
 
-  // Filter 4: Nur „neu" — bereits beworbene ausblenden (client-side, da sent_log per user)
-  if (onlyNew) {
-    jobs = jobs.filter((j) => !j.alreadyApplied);
-  }
+  const total = rows.length > 0 ? Number(rows[0].total) : 0;
+
+  const jobs = rows.map((r) => ({
+    id: r.id,
+    firmenname: r.firmenname,
+    email: r.email,
+    telefonnummer: r.telefonnummer,
+    bereich: r.bereich,
+    ansprechpartner: r.name,
+    geschlecht: r.geschlecht,
+    zusatzinfo: r.zusatzinfo,
+    created_at: r.created_at,
+    alreadyApplied: r.already_applied,
+  }));
 
   return NextResponse.json({
     page,
     pageSize: PAGE_SIZE,
-    total: count ?? 0,
-    totalPages: Math.ceil((count ?? 0) / PAGE_SIZE),
+    total,
+    totalPages: Math.ceil(total / PAGE_SIZE),
     studentZiel: ziel ?? null,
     jobs,
   });
