@@ -32,7 +32,7 @@ export function getMatchingBereiche(ziel: string): string[] {
   const terms = new Set<string>();
 
   // 1. Strip common German prefixes to get core job title
-  let core = clean
+  const core = clean
     // "Ausbildung als/zum/zur/im/in/an/bei Beruf"
     .replace(/^(Ausbildung|Arbeit|Stelle|Job)\s+(als|zum|zur|im|in|an|bei|für|zur\/zum|in der|im Bereich)\s+/i, "")
     // "Ausbildung Beruf" (no preposition)
@@ -67,6 +67,32 @@ export function getMatchingBereiche(ziel: string): string[] {
   return Array.from(terms).filter(
     (t) => t.length >= 2 && !/[,%"_]/.test(t)
   );
+}
+
+/**
+ * Liefert den „sauberen" Kern-Beruf aus dem Studenten-Ziel, ohne Präfix
+ * wie „Ausbildung als …" oder „Arbeit als …", für Email-Subjects.
+ *
+ *   "Ausbildung als Pflegefachfrau"          → "Pflegefachfrau"
+ *   "Arbeit als Sozialassistant"             → "Sozialassistant"
+ *   "(Elektroniker/in für Energie- ...)"     → "Elektroniker für Energie- ..."
+ *   "Ausbildung KFZ-Mechatroniker"           → "KFZ-Mechatroniker"
+ */
+export function getCleanZiel(ziel: string | null | undefined): string {
+  if (!ziel) return "Azubi";
+  const cleaned = ziel
+    .trim()
+    .replace(/[\n\r\t]/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^(Ausbildung|Arbeit|Stelle|Job)\s+(als|zum|zur|im|in|an|bei|für|zur\/zum|in der|im Bereich)\s+/i, "")
+    .replace(/^(Ausbildung|Arbeit|Stelle|Job)\s+/i, "")
+    .replace(/\([mwdf]\/[mwdf](\/[mwdf])?\)/gi, "")
+    .replace(/^\((.+)\)$/, "$1")
+    .replace(/\/in\b/gi, "")
+    .replace(/\/r\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.length >= 2 ? cleaned : "Azubi";
 }
 
 /**

@@ -6,6 +6,7 @@ import { sendEmail } from "@/lib/email/sender";
 import { personalizeEmail } from "@/lib/email/ai-personalize";
 import { buildApplicationEmail } from "@/lib/email/template";
 import { getGDriveThumbnailUrl } from "@/lib/utils/normalize";
+import { getCleanZiel } from "@/lib/email/bereich-mapping";
 
 export const runtime = "nodejs";
 
@@ -49,6 +50,45 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Gmail nicht konfiguriert. Gehe zu E-Mail Setup." }, { status: 400 });
   }
 
+  // Daily-Limit-Schutz: Gmail blockiert bei zu vielen Sends/Tag.
+  // Warmup-Schedule wie im Cron: Woche 1=10, Woche 2=15, Woche 3+=20
+  const daysSinceSetup = Math.floor(
+    (Date.now() - new Date(creds.created_at).getTime()) / 86400000,
+  );
+  const dailyLimit = daysSinceSetup < 7 ? 10 : daysSinceSetup < 14 ? 15 : 20;
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const { count: todayUsed } = await adminSupabase
+    .from("email_send_log")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("status", "sent")
+    .gte("sent_at", todayStart.toISOString());
+
+  if ((todayUsed ?? 0) >= dailyLimit) {
+    return NextResponse.json({
+      error: `Tageslimit erreicht (${todayUsed}/${dailyLimit}). Versuche es morgen wieder — schützt deine Gmail-Adresse vor Blocking.`,
+    }, { status: 429 });
+  }
+
+  // Monatsbudget-Check
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const { count: monthUsed } = await adminSupabase
+    .from("email_send_log")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("status", "sent")
+    .gte("sent_at", monthStart.toISOString());
+
+  if ((monthUsed ?? 0) >= (student.monthly_credit ?? 0)) {
+    return NextResponse.json({
+      error: `Monatsbudget aufgebraucht (${monthUsed}/${student.monthly_credit}). Wende dich an den Admin.`,
+    }, { status: 429 });
+  }
+
   try {
     const appPassword = decryptPassword(creds.encrypted_password);
 
@@ -82,7 +122,10 @@ export async function POST(request: Request) {
       sequenceStep: 1,
     });
 
-    const subject = `Bewerbung als ${student.Ziel || "Azubi"} - ${student.Namen || student.first_name}`;
+    // Sauberer Subject ohne doppeltes „Ausbildung als …"-Präfix
+    const cleanZiel = getCleanZiel(student.Ziel);
+    const studentDisplay = (student.Namen || `${student.first_name} ${student.last_name}`).trim();
+    const subject = `Bewerbung als ${cleanZiel} – ${studentDisplay}`;
 
     await sendEmail({
       fromEmail: creds.email,
@@ -122,7 +165,7 @@ export async function POST(request: Request) {
       user_id: user.id,
       recipient_email: recipientEmail,
       company_name: firmenname,
-      subject: `Bewerbung - ${student.Namen}`,
+      subject: `Bewerbung als ${getCleanZiel(student.Ziel)} – ${(student.Namen || "").trim()}`,
       status: "failed",
       error_message: e.message,
       sequence_step: 1,

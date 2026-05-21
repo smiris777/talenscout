@@ -6,7 +6,7 @@ import { personalizeEmail } from "@/lib/email/ai-personalize";
 import { buildApplicationEmail } from "@/lib/email/template";
 import { getGDriveThumbnailUrl } from "@/lib/utils/normalize";
 import { createCallTaskIfPhoneAvailable } from "@/lib/tasks/generator";
-import { getMatchingBereiche } from "@/lib/email/bereich-mapping";
+import { getMatchingBereiche, getCleanZiel } from "@/lib/email/bereich-mapping";
 import { awardXP } from "@/lib/rewards/engine";
 
 export const runtime = "nodejs";
@@ -209,7 +209,7 @@ export async function GET(request: Request) {
             sequenceStep: 1,
           });
 
-          const subject = `Bewerbung als ${student.Ziel || "Azubi"} – ${student.Namen || student.first_name}`;
+          const subject = `Bewerbung als ${getCleanZiel(student.Ziel)} – ${(student.Namen || `${student.first_name} ${student.last_name}`).trim()}`;
 
           // Send
           await sendEmail({
@@ -253,7 +253,7 @@ export async function GET(request: Request) {
             user_id: student.user_id,
             recipient_email: target.email,
             company_name: target.firmenname,
-            subject: `Bewerbung als ${student.Ziel} – ${student.Namen}`,
+            subject: `Bewerbung als ${getCleanZiel(student.Ziel)} – ${(student.Namen || "").trim()}`,
             status: "failed",
             error_message: err instanceof Error ? err.message : "Unknown error",
             sequence_step: 1,
