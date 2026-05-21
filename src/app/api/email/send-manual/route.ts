@@ -93,19 +93,29 @@ export async function POST(request: Request) {
       html,
     });
 
-    // Log the email
-    await adminSupabase.from("email_send_log").insert({
+    // Log the email — source: "manual" damit es im EmailInbox als ✍️ Manuell
+    // erscheint und der Student seinen Klick wiederfindet
+    const { error: logErr } = await adminSupabase.from("email_send_log").insert({
       user_id: user.id,
       recipient_email: recipientEmail,
       company_name: firmenname,
       subject,
       status: "sent",
       sequence_step: 1,
+      source: "manual",
       sent_at: new Date().toISOString(),
       body_html: html,
     });
 
-    return NextResponse.json({ success: true, message: `Bewerbung an ${firmenname} gesendet!` });
+    if (logErr) {
+      console.error("[send-manual] log insert failed:", logErr.message);
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Bewerbung an ${firmenname} gesendet!`,
+      logged: !logErr,
+    });
   } catch (e: any) {
     // Log failed attempt
     await adminSupabase.from("email_send_log").insert({
@@ -116,6 +126,7 @@ export async function POST(request: Request) {
       status: "failed",
       error_message: e.message,
       sequence_step: 1,
+      source: "manual",
       sent_at: new Date().toISOString(),
     });
 

@@ -6,6 +6,10 @@ import { ManualBewerbungForm } from "@/components/manual-bewerbung-form";
 import { EmailInbox } from "@/components/email-inbox";
 import Link from "next/link";
 
+// Immer frisch laden — sonst sehen Studenten neue Bewerbungen erst nach Hard-Refresh
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function StudentBewerbungen() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
