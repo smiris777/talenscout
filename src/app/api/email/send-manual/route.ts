@@ -55,7 +55,7 @@ export async function POST(request: Request) {
   const daysSinceSetup = Math.floor(
     (Date.now() - new Date(creds.created_at).getTime()) / 86400000,
   );
-  const dailyLimit = daysSinceSetup < 7 ? 10 : daysSinceSetup < 14 ? 15 : 20;
+  const dailyLimit = daysSinceSetup < 7 ? 10 : daysSinceSetup < 14 ? 20 : 30;
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);

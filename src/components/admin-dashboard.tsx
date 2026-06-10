@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Input } from "@/components/ui/input";
+import { SourceStats } from "@/components/source-stats";
 import {
   Select,
   SelectContent,
@@ -995,6 +996,9 @@ export function AdminDashboard() {
           <StatCard label="Interviews" value={stats.interviews} color="text-rose-600" />
         </div>
       )}
+
+      {/* ── Bewerbungen nach Quelle (Woche/Monat/Auto/Scan/Manuell) ── */}
+      <SourceStats title="Bewerbungen nach Quelle (alle Studenten)" />
 
       {/* ── Scraping Live-Status (immer sichtbar) ── */}
       <div className={`rounded-2xl border shadow-sm transition-colors ${scrapeStatus?.isLikelyRunning ? "border-teal-300 bg-teal-50/60" : "border-gray-100 bg-white"}`}>

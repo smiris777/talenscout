@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ManualBewerbungForm } from "@/components/manual-bewerbung-form";
 import { EmailInbox } from "@/components/email-inbox";
+import { SourceStats } from "@/components/source-stats";
 import Link from "next/link";
 
 // Immer frisch laden — sonst sehen Studenten neue Bewerbungen erst nach Hard-Refresh
@@ -158,6 +159,8 @@ export default async function StudentBewerbungen() {
           </CardContent>
         </Card>
       )}
+
+      <SourceStats title="Meine Bewerbungen nach Quelle" />
 
       <ManualBewerbungForm />
 

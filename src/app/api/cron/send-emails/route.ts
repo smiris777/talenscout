@@ -21,8 +21,8 @@ function getDailyLimit(credCreatedAt: string): number {
     (Date.now() - new Date(credCreatedAt).getTime()) / 86400000
   );
   if (daysSinceSetup < 7) return 10;   // Week 1
-  if (daysSinceSetup < 14) return 15;  // Week 2
-  return 20;                            // Week 3+
+  if (daysSinceSetup < 14) return 20;  // Week 2
+  return 30;                            // Week 3+
 }
 
 function sleep(ms: number) {

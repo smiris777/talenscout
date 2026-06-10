@@ -6,9 +6,9 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 // Default-Suchparameter für den Cron-Lauf
-const DEFAULT_SIZE = 25;
-const DEFAULT_PAGES = 5; // pro Beruf bis zu 125 Stellen pro Lauf
-const MAX_INSERTS_PER_RUN = 500;
+const DEFAULT_SIZE = 50;
+const DEFAULT_PAGES = 6; // pro Beruf bis zu 300 Stellen pro Lauf
+const MAX_INSERTS_PER_RUN = 800;
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
