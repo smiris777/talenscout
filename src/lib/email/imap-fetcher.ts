@@ -12,6 +12,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { ImapFlow } from "imapflow";
 import { decryptPassword } from "@/lib/email/crypto";
+import { classifyEmail } from "@/lib/email/classifier";
 
 function decodeQuotedPrintable(str: string): string {
   let decoded = str.replace(/=\r?\n/g, "");
@@ -147,6 +148,9 @@ export async function fetchInboxForUser(
         let bodyText = "";
         if (msg.source) bodyText = decodeEmailBody(msg.source.toString());
 
+        // AI-Klassifizierung (Haiku) - schreibt email_category + requires_action
+        const cls = await classifyEmail(subject, bodyText, fromEmail);
+
         await admin.from("email_received_log").insert({
           user_id: userId,
           from_email: fromEmail,
@@ -155,6 +159,9 @@ export async function fetchInboxForUser(
           body_text: bodyText || null,
           received_at: new Date(receivedAt).toISOString(),
           message_uid: uid,
+          email_category: cls.category,
+          requires_action: cls.requiresAction,
+          action_status: cls.requiresAction ? "pending" : null,
         });
 
         newEmails++;

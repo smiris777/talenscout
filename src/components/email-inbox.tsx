@@ -25,6 +25,25 @@ interface ReceivedEmail {
   body_text: string | null;
   received_at: string;
   is_read: boolean;
+  email_category?: string | null;
+  requires_action?: boolean | null;
+}
+
+function getCategoryBadge(category: string | null | undefined) {
+  switch (category) {
+    case "interview_invite":
+      return { label: "🎯 Vorstellungsgespräch", color: "bg-red-100 text-red-700 border-red-200" };
+    case "contract_offer":
+      return { label: "📝 Zusage", color: "bg-red-100 text-red-700 border-red-200" };
+    case "document_request":
+      return { label: "📄 Dokumente angefragt", color: "bg-amber-100 text-amber-700 border-amber-200" };
+    case "followup_request":
+      return { label: "❓ Rückfrage", color: "bg-blue-100 text-blue-700 border-blue-200" };
+    case "rejection":
+      return { label: "❌ Absage", color: "bg-gray-100 text-gray-500 border-gray-200" };
+    default:
+      return null;
+  }
 }
 
 type Tab = "gesendet" | "empfangen" | "alle";
@@ -188,35 +207,48 @@ export function EmailInbox({
           {tab === "empfangen" && (
             receivedEmails.length > 0 ? (
               <div className="space-y-2">
-                {receivedEmails.map((email) => (
-                  <button
-                    key={email.id}
-                    onClick={() => setSelectedReceived(email)}
-                    className={`w-full text-left p-3.5 rounded-2xl border transition-all duration-200 hover:shadow-sm hover:-translate-y-px ${
-                      !email.is_read ? "bg-white border-gray-200/80 shadow-sm" : "bg-white/60 border-gray-100/80"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          {!email.is_read && <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />}
-                          <span className="font-medium text-sm text-gray-900 truncate">
-                            {email.from_name || email.from_email}
-                          </span>
+                {receivedEmails.map((email) => {
+                  const badge = getCategoryBadge(email.email_category);
+                  const urgent = email.requires_action;
+                  return (
+                    <button
+                      key={email.id}
+                      onClick={() => setSelectedReceived(email)}
+                      className={`w-full text-left p-3.5 rounded-2xl border transition-all duration-200 hover:shadow-sm hover:-translate-y-px ${
+                        urgent
+                          ? "bg-red-50/40 border-red-200 shadow-sm"
+                          : !email.is_read
+                          ? "bg-white border-gray-200/80 shadow-sm"
+                          : "bg-white/60 border-gray-100/80"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {!email.is_read && <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />}
+                            <span className="font-medium text-sm text-gray-900 truncate">
+                              {email.from_name || email.from_email}
+                            </span>
+                            {badge && (
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${badge.color}`}>
+                                {badge.label}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-700 truncate mt-0.5">{email.subject}</p>
+                          {email.body_text && (
+                            <p className="text-xs text-gray-400 truncate mt-0.5">
+                              {email.body_text.substring(0, 100)}...
+                            </p>
+                          )}
                         </div>
-                        <p className="text-sm text-gray-700 truncate mt-0.5">{email.subject}</p>
-                        {email.body_text && (
-                          <p className="text-xs text-gray-400 truncate mt-0.5">
-                            {email.body_text.substring(0, 100)}...
-                          </p>
-                        )}
+                        <span className="text-xs text-gray-400 whitespace-nowrap ml-2">
+                          {new Date(email.received_at).toLocaleDateString("de-DE")}
+                        </span>
                       </div>
-                      <span className="text-xs text-gray-400 whitespace-nowrap ml-2">
-                        {new Date(email.received_at).toLocaleDateString("de-DE")}
-                      </span>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             ) : (
               <div className="text-center py-8">

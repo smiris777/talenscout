@@ -29,6 +29,14 @@
     {
       "path": "/api/cron/fetch-inboxes",
       "schedule": "30 18 * * *"
+    },
+    {
+      "path": "/api/cron/classify-pending",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/classify-pending",
+      "schedule": "0 19 * * *"
     }
   ],
   "functions": {
@@ -39,6 +47,9 @@
       "maxDuration": 300
     },
     "src/app/api/cron/fetch-inboxes/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/classify-pending/route.ts": {
       "maxDuration": 300
     }
   }
