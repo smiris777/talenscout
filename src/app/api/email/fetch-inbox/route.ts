@@ -1,216 +1,39 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { decryptPassword } from "@/lib/email/crypto";
-import { ImapFlow } from "imapflow";
+import { fetchInboxForUser } from "@/lib/email/imap-fetcher";
 
 export const runtime = "nodejs";
 
-// Decode Quoted-Printable encoding (=FC → ü, =E4 → ä, etc.)
-function decodeQuotedPrintable(str: string): string {
-  // Remove soft line breaks (= at end of line)
-  let decoded = str.replace(/=\r?\n/g, "");
-  // Decode =XX hex sequences
-  decoded = decoded.replace(/=([0-9A-Fa-f]{2})/g, (_, hex) => {
-    return String.fromCharCode(parseInt(hex, 16));
-  });
-  // Try to convert from latin1 to utf8 if needed
-  try {
-    const bytes = new Uint8Array([...decoded].map(c => c.charCodeAt(0)));
-    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    return text;
-  } catch {
-    // If not valid UTF-8, try latin1
-    try {
-      const bytes = new Uint8Array([...decoded].map(c => c.charCodeAt(0)));
-      return new TextDecoder("iso-8859-1").decode(bytes);
-    } catch {
-      return decoded;
-    }
-  }
-}
-
-// Decode Base64 encoded email body
-function decodeBase64Body(str: string, charset: string = "utf-8"): string {
-  try {
-    const cleaned = str.replace(/\r?\n/g, "");
-    const bytes = Buffer.from(cleaned, "base64");
-    return new TextDecoder(charset || "utf-8").decode(bytes);
-  } catch {
-    return str;
-  }
-}
-
-// Extract and decode email body from raw MIME source
-function decodeEmailBody(source: string): string {
-  // Find text/plain part
-  const textRegex = /Content-Type:\s*text\/plain[^\r\n]*(?:;\s*charset="?([^";\s]+)"?)?[^]*?Content-Transfer-Encoding:\s*(\S+)[^]*?\r\n\r\n([^]*?)(?:\r\n--|\r\n\.\r\n|$)/i;
-  let match = source.match(textRegex);
-
-  if (!match) {
-    // Try without Content-Transfer-Encoding header
-    const simpleRegex = /Content-Type:\s*text\/plain[^\r\n]*(?:;\s*charset="?([^";\s]+)"?)?[^]*?\r\n\r\n([^]*?)(?:\r\n--|\r\n\.\r\n|$)/i;
-    const simpleMatch = source.match(simpleRegex);
-    if (simpleMatch) {
-      return simpleMatch[2].substring(0, 2000);
-    }
-  }
-
-  if (match) {
-    const charset = match[1] || "utf-8";
-    const encoding = match[2]?.toLowerCase() || "";
-    const body = match[3];
-
-    if (encoding === "quoted-printable") {
-      return decodeQuotedPrintable(body).substring(0, 2000);
-    } else if (encoding === "base64") {
-      return decodeBase64Body(body, charset).substring(0, 2000);
-    }
-    return body.substring(0, 2000);
-  }
-
-  // Fallback: try HTML
-  const htmlRegex = /Content-Type:\s*text\/html[^\r\n]*(?:;\s*charset="?([^";\s]+)"?)?[^]*?Content-Transfer-Encoding:\s*(\S+)[^]*?\r\n\r\n([^]*?)(?:\r\n--|\r\n\.\r\n|$)/i;
-  match = source.match(htmlRegex);
-  if (match) {
-    const charset = match[1] || "utf-8";
-    const encoding = match[2]?.toLowerCase() || "";
-    let body = match[3];
-
-    if (encoding === "quoted-printable") {
-      body = decodeQuotedPrintable(body);
-    } else if (encoding === "base64") {
-      body = decodeBase64Body(body, charset);
-    }
-    // Strip HTML tags
-    return body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().substring(0, 2000);
-  }
-
-  return "";
-}
-
-export async function POST(request: Request) {
+export async function POST() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Nicht eingeloggt" }, { status: 401 });
   }
 
-  const adminSupabase = createAdminClient(
+  const admin = createAdminClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
-  // Get email credentials
-  const { data: creds } = await adminSupabase
-    .from("email_credentials")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("is_active", true)
-    .single();
+  const result = await fetchInboxForUser(admin, user.id);
 
-  if (!creds) {
-    return NextResponse.json({ error: "Gmail nicht konfiguriert" }, { status: 400 });
+  if (result.error) {
+    return NextResponse.json(
+      { error: `Posteingang konnte nicht abgerufen werden: ${result.error}` },
+      { status: 500 },
+    );
   }
 
-  const appPassword = decryptPassword(creds.encrypted_password);
-
-  // Get list of companies we've sent emails to
-  const { data: sentEmails } = await adminSupabase
-    .from("email_send_log")
-    .select("recipient_email")
-    .eq("user_id", user.id)
-    .eq("status", "sent");
-
-  const sentToEmails = new Set(
-    (sentEmails || []).map((e) => e.recipient_email.toLowerCase())
-  );
-
-  // Get already fetched UIDs to avoid duplicates
-  const { data: existingReceived } = await adminSupabase
-    .from("email_received_log")
-    .select("message_uid")
-    .eq("user_id", user.id);
-
-  const existingUids = new Set(
-    (existingReceived || []).map((e) => e.message_uid).filter(Boolean)
-  );
-
-  let newEmails = 0;
-
-  try {
-    const client = new ImapFlow({
-      host: "imap.gmail.com",
-      port: 993,
-      secure: true,
-      auth: {
-        user: creds.email,
-        pass: appPassword,
-      },
-      logger: false,
-    });
-
-    await client.connect();
-
-    const lock = await client.getMailboxLock("INBOX");
-
-    try {
-      // Fetch last 30 days of emails
-      const since = new Date();
-      since.setDate(since.getDate() - 30);
-
-      const messages = client.fetch(
-        { since },
-        { envelope: true, uid: true, bodyStructure: true, source: { maxLength: 50000 } }
-      );
-
-      for await (const msg of messages) {
-        const uid = String(msg.uid);
-        if (existingUids.has(uid)) continue;
-
-        const fromEmail = msg.envelope?.from?.[0]?.address?.toLowerCase() || "";
-        const fromName = msg.envelope?.from?.[0]?.name || "";
-
-        // Only save emails from companies we've contacted
-        if (!sentToEmails.has(fromEmail)) continue;
-
-        const subject = msg.envelope?.subject || "(Kein Betreff)";
-        const receivedAt = msg.envelope?.date || new Date();
-
-        // Extract and decode text from source
-        let bodyText = "";
-        if (msg.source) {
-          const source = msg.source.toString();
-          bodyText = decodeEmailBody(source);
-        }
-
-        await adminSupabase.from("email_received_log").insert({
-          user_id: user.id,
-          from_email: fromEmail,
-          from_name: fromName,
-          subject,
-          body_text: bodyText || null,
-          received_at: new Date(receivedAt).toISOString(),
-          message_uid: uid,
-        });
-
-        newEmails++;
-      }
-    } finally {
-      lock.release();
-    }
-
-    await client.logout();
-
-    return NextResponse.json({
-      success: true,
-      newEmails,
-      message: newEmails > 0
-        ? `${newEmails} neue Antwort${newEmails === 1 ? "" : "en"} gefunden!`
+  return NextResponse.json({
+    success: true,
+    newEmails: result.newEmails,
+    message:
+      result.newEmails > 0
+        ? `${result.newEmails} neue Antwort${result.newEmails === 1 ? "" : "en"} gefunden!`
         : "Keine neuen Antworten.",
-    });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "IMAP Fehler";
-    return NextResponse.json({ error: `Posteingang konnte nicht abgerufen werden: ${message}` }, { status: 500 });
-  }
+  });
 }

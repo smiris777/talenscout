@@ -21,6 +21,14 @@
     {
       "path": "/api/cron/scrape-arbeitsagentur",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-inboxes",
+      "schedule": "30 6 * * *"
+    },
+    {
+      "path": "/api/cron/fetch-inboxes",
+      "schedule": "30 18 * * *"
     }
   ],
   "functions": {
@@ -28,6 +36,9 @@
       "maxDuration": 300
     },
     "src/app/api/cron/scrape-arbeitsagentur/route.ts": {
+      "maxDuration": 300
+    },
+    "src/app/api/cron/fetch-inboxes/route.ts": {
       "maxDuration": 300
     }
   }
