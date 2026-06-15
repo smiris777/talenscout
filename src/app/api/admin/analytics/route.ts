@@ -57,15 +57,15 @@ export async function GET() {
     emailsSentAllRes,
     emailsSent30Res,
     emailsReceivedAllRes,
-    classificationRes,
+    email_categoryRes,
     bewerbungenAllRes,
     bewerbungen14Res,
   ] = await Promise.all([
     admin.from("ausbildung_main_engine").select(`user_id, "Namen", "Aktiv", "Ziel", BewerbungsfotoLink, gmail_app_password_set, student_active`).eq("sichtbar", true),
     admin.from("email_send_log").select("user_id", { count: "exact", head: true }).eq("status", "sent"),
     admin.from("email_send_log").select("user_id, sent_at").eq("status", "sent").gte("sent_at", since30),
-    admin.from("email_received_log").select("user_id, received_at, classification", { count: "exact" }).gte("received_at", since30),
-    admin.from("email_received_log").select("classification, user_id").not("classification", "is", null),
+    admin.from("email_received_log").select("user_id, received_at, email_category", { count: "exact" }).gte("received_at", since30),
+    admin.from("email_received_log").select("email_category, user_id").not("email_category", "is", null),
     admin.from("bewerbungen").select("*", { count: "exact", head: true }),
     admin.from("bewerbungen").select("created_at").gte("created_at", since14),
   ]);
@@ -77,7 +77,7 @@ export async function GET() {
   const [perStudentSentRes, perStudentReceivedRes, perStudentInterviewRes] = await Promise.all([
     admin.from("email_send_log").select("user_id").eq("status", "sent").in("user_id", userIds),
     admin.from("email_received_log").select("user_id").in("user_id", userIds),
-    admin.from("email_received_log").select("user_id").in("classification", ["interview_invite", "offer"]).in("user_id", userIds),
+    admin.from("email_received_log").select("user_id").in("email_category", ["interview_invite", "contract_offer"]).in("user_id", userIds),
   ]);
 
   const sentMap: Record<string, number> = {};
@@ -88,9 +88,11 @@ export async function GET() {
   for (const r of perStudentInterviewRes.data ?? []) interviewMap[r.user_id] = (interviewMap[r.user_id] || 0) + 1;
 
   // Classification breakdown (all time)
+  // Frontend (admin-dashboard.tsx) erwartet "classificationCounts" mit Legacy-Keys ("offer" statt "contract_offer")
   const classificationCounts: Record<string, number> = {};
-  for (const r of classificationRes.data ?? []) {
-    const c = r.classification || "other";
+  for (const r of email_categoryRes.data ?? []) {
+    const raw = r.email_category || "other";
+    const c = raw === "contract_offer" ? "offer" : raw;
     classificationCounts[c] = (classificationCounts[c] || 0) + 1;
   }
 
