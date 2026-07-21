@@ -101,8 +101,8 @@ export async function GET(request: Request) {
 
       if (!creds) continue;
 
-      // 4. Check daily limit (warm-up schedule based on creds age)
-      const maxDailyEmails = getDailyLimit(creds.created_at);
+      // 4. Check daily limit — use student's max_daily_emails from DB (set by admin)
+      const maxDailyEmails = student.max_daily_emails ?? getDailyLimit(creds.created_at);
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);

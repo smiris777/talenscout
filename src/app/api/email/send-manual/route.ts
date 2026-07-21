@@ -50,12 +50,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Gmail nicht konfiguriert. Gehe zu E-Mail Setup." }, { status: 400 });
   }
 
-  // Daily-Limit-Schutz: Gmail blockiert bei zu vielen Sends/Tag.
-  // Warmup-Schedule wie im Cron: Woche 1=10, Woche 2=15, Woche 3+=20
-  const daysSinceSetup = Math.floor(
-    (Date.now() - new Date(creds.created_at).getTime()) / 86400000,
-  );
-  const dailyLimit = daysSinceSetup < 7 ? 10 : daysSinceSetup < 14 ? 20 : 30;
+  // Daily-Limit-Schutz: Gesamtlimit pro Tag (auto + manuell) = 100.
+  // Der Cron-Job belegt davon max. max_daily_emails (Standard 20),
+  // der Rest steht dem Studenten für manuelle Bewerbungen zur Verfügung.
+  const dailyLimit = 100;
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
